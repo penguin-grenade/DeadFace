@@ -17,9 +17,13 @@ npm run dev          # open the printed URL, click to start
 npm run build        # static build in dist/ (any static host works)
 ```
 
+`npm run package:artifact` also writes `dist-artifact/`, a variant for hosts that
+only serve common web file types (models become embedded `.gltf.json`, CSS is
+inlined). That is what the hosted claude.ai build uses.
+
 Controls: WASD move, Shift sprint, C crouch, Space hop, mouse look, left click
 fire, right mouse raise/aim, R reload, F weapon light, H toggle ammo + dot,
-T reset props, 1/2/3 post-FX quality.
+T reset props, 1/2/3 post-FX quality, Esc pause.
 
 ## What makes it look like bodycam footage
 
@@ -51,6 +55,7 @@ blender/                  asset pipeline (see docs/PIPELINE.md)
 public/models/*.glb       exported by the pipeline
 public/textures/*.jpg     baked PBR sets (albedo / normal / roughness)
 public/assets.json        manifest the game reads; anything missing falls back to procedural
+tools/artifact.mjs        packages dist/ for restrictive static hosts
 tools/smoke.mjs           headless test: renders, fires at a mannequin, checks it drops
 ```
 

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Renderer, type Quality } from './engine/renderer';
-import { assetManifest, assetUrl } from './engine/assets';
+import { assetManifest, modelUrl } from './engine/assets';
 import { Physics } from './engine/physics';
 import { Input } from './engine/input';
 import { Audio } from './engine/audio';
@@ -23,7 +23,7 @@ async function loadModels(): Promise<ModelLibrary> {
     (['mannequin', 'steel_target', 'can', 'box_small'] as const).map(async (name) => {
       if (!models.includes(name)) return;
       try {
-        const gltf = await loader.loadAsync(assetUrl(`models/${name}.glb`));
+        const gltf = await loader.loadAsync(await modelUrl(name));
         gltf.scene.traverse((o) => {
           if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true;
         });
@@ -89,10 +89,17 @@ async function main() {
   loadingEl.hidden = true;
   ctaEl.hidden = false;
   if (DEMO) startEl.hidden = true;
-  startEl.addEventListener('click', () => {
+  const start = () => {
     audio.init();
     input.requestLock();
     startEl.hidden = true;
+  };
+  startEl.addEventListener('click', start);
+  startEl.addEventListener('keydown', (e) => {
+    if (e.code === 'Enter' || e.code === 'Space') {
+      e.preventDefault();
+      start();
+    }
   });
   document.addEventListener('pointerlockchange', () => {
     // Esc releases the lock: show the menu again.
@@ -176,5 +183,9 @@ async function main() {
 main().catch((e) => {
   console.error(e);
   const el = document.getElementById('loading');
-  if (el) el.textContent = `Failed to start: ${e}`;
+  if (!el) return;
+  el.className = 'error';
+  el.textContent =
+    `The range could not start in this browser (${e instanceof Error ? e.message : e}). ` +
+    'It needs WebGL 2 and WebAssembly: try a current desktop Chrome, Edge or Firefox, or run it locally with npm run dev.';
 });

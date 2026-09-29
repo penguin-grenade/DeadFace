@@ -18,7 +18,10 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM || undefined,
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 });
-const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+// Keep the test offline: web fonts are optional (the CSS has fallback stacks).
+await context.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, contentType: 'text/css', body: '' }));
+const page = await context.newPage();
 const errors = [];
 page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
@@ -44,7 +47,7 @@ console.log('stats', stats);
 await page.close();
 
 // Functional check: aim at the nearest mannequin and fire until it drops.
-const page2 = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+const page2 = await context.newPage();
 page2.on('pageerror', (e) => errors.push(String(e)));
 await page2.goto(url.replace('?demo', ''), { timeout: 120_000 });
 await page2.waitForFunction(() => window.__game, null, { timeout: 120_000 });
@@ -77,6 +80,7 @@ const combat = await page2.evaluate(async () => {
   return { down: m.down, shots, ammo: g.weapon.ammo };
 });
 await page2.waitForTimeout(1500);
+await page2.evaluate(() => (document.getElementById('start').hidden = true));
 await page2.screenshot({ path: `${outDir}/combat.png` });
 console.log('combat', combat);
 if (!combat.down) errors.push('mannequin did not go down after 10 shots');

@@ -2,9 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Bodycam Shooter</title>
     <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@800&family=Share+Tech+Mono&display=swap" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -20,11 +23,13 @@
       <div id="dot" class="dot"></div>
     </div>
 
-    <div id="start" class="start">
+    <div id="start" class="start" role="button" tabindex="0" aria-label="Start">
       <div class="panel">
         <h1>BODYCAM</h1>
-        <p id="loading">Loading…</p>
+        <p class="unit">Unit BWC-7 · Range 4 · Low light</p>
+        <p id="loading">Loading range…</p>
         <p class="cta" id="cta" hidden>Click to start</p>
+        <p class="touch-note">This prototype needs a keyboard and mouse.</p>
         <table>
           <tr><td>WASD</td><td>Move</td></tr>
           <tr><td>Shift / C</td><td>Sprint / crouch</td></tr>
@@ -32,9 +37,10 @@
           <tr><td>Right mouse</td><td>Raise weapon (aim)</td></tr>
           <tr><td>R</td><td>Reload</td></tr>
           <tr><td>F</td><td>Weapon light</td></tr>
-          <tr><td>H</td><td>Toggle HUD (ammo, dot)</td></tr>
+          <tr><td>H</td><td>Show ammo and dot</td></tr>
           <tr><td>T</td><td>Reset props</td></tr>
-          <tr><td>1 / 2 / 3</td><td>Post-FX quality low / med / high</td></tr>
+          <tr><td>1 / 2 / 3</td><td>Post-FX low / med / high</td></tr>
+          <tr><td>Esc</td><td>Pause</td></tr>
         </table>
       </div>
     </div>

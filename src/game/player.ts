@@ -47,6 +47,8 @@ export class Player {
   private bobPhase = 0;
   private stepSign = 1;
   sensitivity = 0.0022;
+  /** Head bob / sway multiplier; toned down for people who ask for reduced motion. */
+  private motionScale = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.3 : 1;
 
   // Camera feel springs
   private landDip = new Spring(120, 14);
@@ -166,7 +168,7 @@ export class Player {
     const freq = this.sprinting ? 2.35 : 1.85; // steps per second / 2
     const prevPhase = this.bobPhase;
     this.bobPhase += dt * freq * Math.PI * 2 * Math.min(1, hSpeed / 1.5);
-    const amp = this.moveAmount * (this.sprinting ? 1.6 : 1.0);
+    const amp = this.moveAmount * (this.sprinting ? 1.6 : 1.0) * this.motionScale;
     const bobY = -Math.abs(Math.sin(this.bobPhase)) * 0.045 * amp;
     const bobX = Math.cos(this.bobPhase) * 0.03 * amp;
     const bobRoll = Math.cos(this.bobPhase) * 0.012 * amp;
@@ -179,7 +181,7 @@ export class Player {
     }
 
     // Breathing sway when idle.
-    const breathe = Math.sin(time * 1.6) * 0.004;
+    const breathe = Math.sin(time * 1.6) * 0.004 * this.motionScale;
     const swayX = Math.sin(time * 0.7) * 0.0025 + Math.sin(time * 1.9) * 0.001;
 
     // Strafe roll.

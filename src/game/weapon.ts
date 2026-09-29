@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GROUP_DEBRIS, type Physics } from '../engine/physics';
-import { assetManifest, assetUrl } from '../engine/assets';
+import { assetManifest, modelUrl } from '../engine/assets';
 import type { Audio } from '../engine/audio';
 import type { Input } from '../engine/input';
 import type { Player } from './player';
@@ -162,7 +162,7 @@ export class Weapon {
     const load = async (name: string) => {
       if (!models.includes(name)) return null;
       try {
-        const gltf = await new GLTFLoader().loadAsync(assetUrl(`models/${name}.glb`));
+        const gltf = await new GLTFLoader().loadAsync(await modelUrl(name));
         gltf.scene.traverse((o) => {
           if ((o as THREE.Mesh).isMesh) {
             o.castShadow = true;

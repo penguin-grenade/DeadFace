@@ -182,6 +182,8 @@ def join(name, objs):
     bpy.context.scene.collection.objects.link(obj)
     for o in objs:
         bpy.data.objects.remove(o, do_unlink=True)
+    # The sources may have held the name; claim it now that they're gone.
+    obj.name = name
     return obj
 
 

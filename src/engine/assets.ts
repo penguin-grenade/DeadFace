@@ -6,16 +6,22 @@
 export interface AssetManifest {
   models: string[]; // stems of public/models/<name>.glb
   textures: string[]; // stems of public/textures/<name>_{albedo,normal,roughness}.jpg
+  /** File suffix for models. ".glb" by default; hosts that refuse .glb get embedded glTF as ".gltf.json". */
+  modelSuffix: string;
 }
 
 let manifest: Promise<AssetManifest> | null = null;
 
 export function assetManifest(): Promise<AssetManifest> {
   manifest ??= fetch(`${import.meta.env.BASE_URL}assets.json`)
-    .then((r) => (r.ok ? r.json() : { models: [], textures: [] }))
-    .then((m) => ({ models: m.models ?? [], textures: m.textures ?? [] }))
-    .catch(() => ({ models: [], textures: [] }));
+    .then((r): Promise<Partial<AssetManifest>> => (r.ok ? r.json() : Promise.resolve({})))
+    .catch((): Partial<AssetManifest> => ({}))
+    .then((m) => ({ models: m.models ?? [], textures: m.textures ?? [], modelSuffix: m.modelSuffix ?? '.glb' }));
   return manifest;
 }
 
 export const assetUrl = (path: string) => `${import.meta.env.BASE_URL}${path}`;
+
+export async function modelUrl(name: string) {
+  return assetUrl(`models/${name}${(await assetManifest()).modelSuffix}`);
+}

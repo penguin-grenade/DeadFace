@@ -1,11 +1,26 @@
+/* Full-bleed camera feed with burned-in OSD text on top. One deliberate dark look. */
+:root {
+  --feed: #050506; /* behind the canvas */
+  --osd: #f2efe6; /* burned-in overlay text */
+  --osd-shadow: rgba(0, 0, 0, 0.85);
+  --rec: #e0281c; /* recording indicator */
+  --key: #e3ad4c; /* control key labels */
+  --scrim: rgba(4, 5, 6, 0.76);
+  --dot: rgba(242, 239, 230, 0.6);
+  --focus: #e3ad4c;
+  --font-osd: 'Share Tech Mono', 'Courier New', ui-monospace, monospace;
+  --font-display: 'Saira Condensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
+  color-scheme: dark;
+}
+
 html,
 body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #000;
-  color: #eee;
-  font-family: 'Courier New', ui-monospace, monospace;
+  background: var(--feed);
+  color: var(--osd);
+  font-family: var(--font-osd);
 }
 
 #view {
@@ -20,18 +35,18 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  text-shadow: 0 0 2px #000, 0 0 4px #000;
+  text-shadow: 0 0 2px var(--osd-shadow), 0 0 4px var(--osd-shadow);
 }
 
 .stamp {
   position: absolute;
-  top: 3.2vh;
+  top: calc(3.2vh + env(safe-area-inset-top, 0px));
   right: 4vw;
-  font-size: clamp(11px, 1.6vw, 22px);
-  font-weight: bold;
+  font-size: clamp(12px, 1.7vw, 24px);
   letter-spacing: 0.06em;
   text-align: right;
   opacity: 0.92;
+  font-variant-numeric: tabular-nums;
 }
 
 .stamp .row {
@@ -45,7 +60,7 @@ body {
   width: 0.6em;
   height: 0.6em;
   border-radius: 50%;
-  background: #e21;
+  background: var(--rec);
   animation: blink 1s steps(2, start) infinite;
 }
 
@@ -58,9 +73,10 @@ body {
 .ammo {
   position: absolute;
   left: 4vw;
-  bottom: 4vh;
-  font-size: clamp(11px, 1.3vw, 18px);
+  bottom: calc(4vh + env(safe-area-inset-bottom, 0px));
+  font-size: clamp(12px, 1.4vw, 19px);
   opacity: 0.55;
+  font-variant-numeric: tabular-nums;
 }
 
 .hint {
@@ -68,7 +84,9 @@ body {
   left: 50%;
   bottom: 12vh;
   transform: translateX(-50%);
-  font-size: 14px;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   opacity: 0;
   transition: opacity 0.3s;
 }
@@ -85,7 +103,7 @@ body {
   height: 3px;
   margin: -1.5px 0 0 -1.5px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--dot);
 }
 
 .hud.minimal .ammo,
@@ -99,8 +117,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.72);
+  padding-inline: 16px;
+  background: var(--scrim);
   cursor: pointer;
+}
+
+.start:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -6px;
 }
 
 .start[hidden] {
@@ -109,25 +133,47 @@ body {
 
 .panel {
   text-align: center;
-  padding: 16px;
+  padding-block: 16px;
+  max-width: 34rem;
 }
 
 .panel h1 {
-  letter-spacing: 0.4em;
-  font-size: clamp(28px, 6vw, 64px);
-  margin: 0 0 0.3em;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.32em;
+  /* optical centring: trailing letter-spacing */
+  margin: 0 -0.32em 0 0;
+  font-size: clamp(40px, 9vw, 96px);
+  line-height: 1;
+  text-wrap: balance;
+}
+
+.panel .unit {
+  margin: 0.6em 0 1.6em;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.7;
 }
 
 .panel .cta {
   font-size: 18px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   animation: blink 1.2s steps(2, start) infinite;
+}
+
+.panel .error {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--key);
 }
 
 .panel table {
   margin: 1.5em auto 0;
   border-collapse: collapse;
   font-size: 13px;
-  opacity: 0.8;
+  opacity: 0.85;
 }
 
 .panel td {
@@ -137,5 +183,27 @@ body {
 
 .panel td:first-child {
   text-align: right;
-  color: #fc6;
+  color: var(--key);
+}
+
+.touch-note {
+  display: none;
+  font-size: 14px;
+  color: var(--key);
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .touch-note {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rec,
+  .panel .cta {
+    animation: none;
+  }
+  .hint {
+    transition: none;
+  }
 }

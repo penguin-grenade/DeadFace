@@ -44,6 +44,7 @@ asset set still runs.
 - **Scanned materials:** drop CC0 sets (ambientCG, Poly Haven) into `public/textures` using the same file names and make sure the stem is in `assets.json`. Wall textures map one tile per wall height, so vertical grime reads correctly.
 - **Hand-made models:** export glTF 2.0 binary with the node names above into `public/models`, add the stem to `assets.json`.
 - **Skinned characters:** export with an armature and actions; load with `GLTFLoader` and play clips via `THREE.AnimationMixer` (not wired up yet).
+- **Restrictive hosts:** `tools/artifact.mjs` converts every `.glb` to glTF JSON with an embedded buffer and sets `modelSuffix` in `assets.json`, so the game loads `.gltf.json` instead.
 - **Compression:** for larger assets run `npx @gltf-transform/cli optimize in.glb out.glb --texture-compress webp` and enable `DRACOLoader`/`KTX2Loader` in the game.
 
 ## Suggested next pipeline steps
