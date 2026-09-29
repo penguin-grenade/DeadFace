@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
-import { assetManifest, assetUrl, gltfLoader } from '../engine/assets';
+import { assetUrl, fetchBase64, loadGLTF } from '../engine/assets';
 import type { Physics, SurfaceKind } from '../engine/physics';
 import type { Level } from './level';
 import type { MoonShafts } from '../engine/postfx';
@@ -117,28 +117,16 @@ function renderMoonShadow(renderer: THREE.WebGLRenderer, meshes: THREE.Mesh[], d
 const lin = (c: V3) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.LinearSRGBColorSpace);
 const v3 = (a: V3) => new THREE.Vector3(a[0], a[1], a[2]);
 
+/** null when the file isn't there; a request the host refuses throws, so the caller can report it. */
 async function fetchJSON<T>(url: string): Promise<T | null> {
-  try {
-    const r = await fetch(url);
-    return r.ok ? ((await r.json()) as T) : null;
-  } catch {
-    return null;
-  }
+  const r = await fetch(url);
+  return r.ok && r.headers.get('content-type')?.includes('json') ? ((await r.json()) as T) : null;
 }
 
 /** Radiance HDR, or the same file wrapped as base64 JSON for hosts that refuse unknown file types. */
 async function loadHDR(url: string): Promise<THREE.DataTexture> {
   const loader = new HDRLoader().setDataType(THREE.HalfFloatType);
-  let buffer: ArrayBuffer;
-  if (url.endsWith('.json')) {
-    const b64 = (await (await fetch(url)).json()) as string;
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    buffer = bytes.buffer;
-  } else {
-    buffer = await (await fetch(url)).arrayBuffer();
-  }
+  const buffer = url.endsWith('.json') ? await fetchBase64(url) : await (await fetch(url)).arrayBuffer();
   const parsed = loader.parse(buffer);
   if (!parsed) throw new Error('probe: unreadable HDR');
   const tex = new THREE.DataTexture(parsed.data, parsed.width, parsed.height, THREE.RGBAFormat, parsed.type);
@@ -158,10 +146,8 @@ interface TexSet {
 }
 
 export async function loadBakedLevel(scene: THREE.Scene, physics: Physics, renderer: THREE.WebGLRenderer): Promise<BakedLevel | null> {
-  const base = assetUrl('level/');
-  const json = await fetchJSON<LevelJSON>(`${base}level.json`);
+  const json = await fetchJSON<LevelJSON>(assetUrl('level/level.json'));
   if (!json || json.version !== 1) return null;
-  const { modelSuffix } = await assetManifest();
 
   const texLoader = new THREE.TextureLoader();
   const maxAniso = renderer.capabilities.getMaxAnisotropy();
@@ -185,8 +171,8 @@ export async function loadBakedLevel(scene: THREE.Scene, physics: Physics, rende
   const texSet = (name: string) => {
     let p = texSets.get(name);
     if (!p) {
-      const t = assetUrl(`textures/${name}`);
-      p = Promise.all([loadTex(`${t}_albedo.jpg`, true, true), loadTex(`${t}_normal.jpg`, false, true), loadTex(`${t}_roughness.jpg`, false, true)]).then(
+      const t = (k: string) => assetUrl(`textures/${name}_${k}.jpg`);
+      p = Promise.all([loadTex(t('albedo'), true, true), loadTex(t('normal'), false, true), loadTex(t('roughness'), false, true)]).then(
         ([map, normalMap, roughnessMap]) => ({ map, normalMap, roughnessMap }),
       );
       texSets.set(name, p);
@@ -194,13 +180,11 @@ export async function loadBakedLevel(scene: THREE.Scene, physics: Physics, rende
     return p;
   };
 
-  const levelFile = modelSuffix === '.glb' ? 'level.glb' : `level${modelSuffix}`;
-  const probeFile = modelSuffix === '.glb' ? json.probe.file : `${json.probe.file}.json`;
   const [gltf, lightMap, mask, probeTex] = await Promise.all([
-    gltfLoader().loadAsync(`${base}${levelFile}`),
-    json.lightmap ? loadTex(`${base}${json.lightmap.file}`, true, false) : Promise.resolve(null),
-    json.mask ? loadTex(`${base}${json.mask.file}`, false, false) : Promise.resolve(null),
-    loadHDR(`${base}${probeFile}`),
+    loadGLTF('level/level.glb'),
+    json.lightmap ? loadTex(assetUrl(`level/${json.lightmap.file}`), true, false) : Promise.resolve(null),
+    json.mask ? loadTex(assetUrl(`level/${json.mask.file}`), false, false) : Promise.resolve(null),
+    loadHDR(assetUrl(`level/${json.probe.file}`)),
     ...Object.values(json.materials).map((m) => texSet(m.tex)),
   ]);
 

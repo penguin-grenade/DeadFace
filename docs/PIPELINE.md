@@ -101,8 +101,16 @@ geometry-only check.
 
 Large meshes are quantised and meshopt-compressed (`@gltf-transform/cli meshopt`);
 the game registers `MeshoptDecoder`, so plain and compressed files both load.
-`tools/artifact.mjs` converts .glb and .hdr files into JSON-wrapped variants for
-static hosts that only serve common web file types.
+
+`tools/artifact.mjs` packages the build for locked-down hosts such as a claude.ai
+Artifact, which serve only common web file types and whose security policy lets
+the page `fetch()` its own files but not `data:` or `blob:` URLs. That rules out
+GLTFLoader's usual paths for embedded buffers and images, so .glb and .hdr files
+ship as base64 JSON strings: `loadGLTF()` in `src/engine/assets.ts` decodes them
+and parses the glTF in memory, with images decoded by `<img>` elements. Every file
+gets a content-hashed name, and the manifest mapping `public/` paths to published
+names is embedded in the page, so a cached file from an earlier publish is never
+picked up. Anything that still fails to load is listed on the start screen.
 
 ## Swapping in real assets
 

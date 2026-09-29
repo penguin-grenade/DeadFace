@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Renderer, type Quality } from './engine/renderer';
-import { assetManifest, gltfLoader, modelUrl } from './engine/assets';
+import { assetManifest, assetProblems, loadGLTF, policyBlocks, reportAssetProblem } from './engine/assets';
 import { Physics } from './engine/physics';
 import { Input } from './engine/input';
 import { Audio } from './engine/audio';
@@ -18,19 +18,18 @@ const DEMO = params.has('demo');
 
 async function loadModels(): Promise<ModelLibrary> {
   const lib: ModelLibrary = {};
-  const loader = gltfLoader();
   const { models } = await assetManifest();
   await Promise.all(
     (['mannequin', 'steel_target', 'can', 'box_small'] as const).map(async (name) => {
       if (!models.includes(name)) return;
       try {
-        const gltf = await loader.loadAsync(await modelUrl(name));
+        const gltf = await loadGLTF(`models/${name}.glb`);
         gltf.scene.traverse((o) => {
           if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true;
         });
         lib[name] = gltf.scene;
       } catch (e) {
-        console.warn(`model ${name} failed to load`, e);
+        reportAssetProblem(name, e);
       }
     }),
   );
@@ -46,6 +45,7 @@ async function main() {
   const startEl = document.getElementById('start')!;
   const loadingEl = document.getElementById('loading')!;
   const ctaEl = document.getElementById('cta')!;
+  const noteEl = document.getElementById('asset-note')!;
 
   const scene = new THREE.Scene();
   // Wide lens; the barrel distortion pass adds the fisheye look on top.
@@ -61,7 +61,7 @@ async function main() {
   const baked = params.has('oldlevel')
     ? null
     : await loadBakedLevel(scene, physics, renderer.renderer).catch((e) => {
-        console.warn('baked level failed to load, using the procedural range', e);
+        reportAssetProblem('warehouse level', e);
         return null;
       });
   const level: Level = baked ?? buildLevel(scene, physics, renderer.renderer, mats);
@@ -104,6 +104,11 @@ async function main() {
 
   loadingEl.hidden = true;
   ctaEl.hidden = false;
+  if (assetProblems.length) {
+    const blocked = policyBlocks.size ? ` The host blocked: ${[...policyBlocks].join(', ')}.` : '';
+    noteEl.textContent = `Some files didn't load, so parts of the range will look simpler: ${assetProblems.join('; ')}.${blocked}`;
+    noteEl.hidden = false;
+  }
   if (DEMO) startEl.hidden = true;
   const start = () => {
     audio.init();

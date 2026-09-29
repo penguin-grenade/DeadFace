@@ -21,9 +21,12 @@ npm run dev          # open the printed URL, click to start
 npm run build        # static build in dist/ (any static host works)
 ```
 
-`npm run package:artifact` also writes `dist-artifact/`, a variant for hosts that
-only serve common web file types (models become embedded `.gltf.json`, the HDR
-probe becomes JSON, CSS is inlined). That is what the hosted claude.ai build uses.
+`npm run package:artifact` also writes `dist-artifact/`, a variant for locked-down
+hosts that only serve common web file types and only let the page fetch its own
+files: models, the level and the HDR probe ship as base64 JSON that the game
+decodes itself, every asset gets a content-hashed name, and the asset manifest
+and CSS are inlined into the page. That is what the hosted claude.ai build uses.
+If any file fails to load, the start screen lists it.
 
 Controls: WASD move, Shift sprint, C crouch, Space hop, mouse look, left click
 fire, right mouse raise/aim, R reload, F weapon light, H toggle ammo + dot,

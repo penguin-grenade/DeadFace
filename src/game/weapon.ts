@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import { GROUP_DEBRIS, type HitInfo, type Physics } from '../engine/physics';
-import { assetManifest, gltfLoader, modelUrl } from '../engine/assets';
+import { assetManifest, loadGLTF, reportAssetProblem } from '../engine/assets';
 import type { Audio } from '../engine/audio';
 import type { Input } from '../engine/input';
 import type { Player } from './player';
@@ -160,7 +160,7 @@ export class Weapon {
     const load = async (name: string) => {
       if (!models.includes(name)) return null;
       try {
-        const gltf = await gltfLoader().loadAsync(await modelUrl(name));
+        const gltf = await loadGLTF(`models/${name}.glb`);
         gltf.scene.traverse((o) => {
           if ((o as THREE.Mesh).isMesh) {
             // No full body to go with it, so the viewmodel casts no shadow (it also keeps the lamps' cached shadows static).
@@ -170,7 +170,7 @@ export class Weapon {
         });
         return gltf.scene;
       } catch (e) {
-        console.warn(`${name}.glb failed to load, using procedural fallback`, e);
+        reportAssetProblem(name, e);
         return null;
       }
     };
