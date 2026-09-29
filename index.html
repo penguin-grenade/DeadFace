@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bodycam Shooter</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+
+    <div id="overlay" class="hud">
+      <div class="stamp">
+        <div class="row"><span class="rec"></span><span id="stamp-time">0000-00-00 T00:00:00Z</span></div>
+        <div class="row">BWC-7 X6041127</div>
+      </div>
+      <div id="ammo" class="ammo">15 / 45</div>
+      <div id="hint" class="hint"></div>
+      <div id="dot" class="dot"></div>
+    </div>
+
+    <div id="start" class="start">
+      <div class="panel">
+        <h1>BODYCAM</h1>
+        <p id="loading">Loading…</p>
+        <p class="cta" id="cta" hidden>Click to start</p>
+        <table>
+          <tr><td>WASD</td><td>Move</td></tr>
+          <tr><td>Shift / C</td><td>Sprint / crouch</td></tr>
+          <tr><td>Mouse</td><td>Look, left click to fire</td></tr>
+          <tr><td>Right mouse</td><td>Raise weapon (aim)</td></tr>
+          <tr><td>R</td><td>Reload</td></tr>
+          <tr><td>F</td><td>Weapon light</td></tr>
+          <tr><td>H</td><td>Toggle HUD (ammo, dot)</td></tr>
+          <tr><td>T</td><td>Reset props</td></tr>
+          <tr><td>1 / 2 / 3</td><td>Post-FX quality low / med / high</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

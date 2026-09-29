@@ -1,0 +1,19 @@
+{
+  "models": [
+    "arms",
+    "box_small",
+    "can",
+    "mannequin",
+    "pistol",
+    "steel_target"
+  ],
+  "textures": [
+    "cardboard",
+    "concrete_floor",
+    "concrete_wall",
+    "plaster",
+    "rusty",
+    "steel",
+    "wood"
+  ]
+}

@@ -1,0 +1,141 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #eee;
+  font-family: 'Courier New', ui-monospace, monospace;
+}
+
+#view {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  text-shadow: 0 0 2px #000, 0 0 4px #000;
+}
+
+.stamp {
+  position: absolute;
+  top: 3.2vh;
+  right: 4vw;
+  font-size: clamp(11px, 1.6vw, 22px);
+  font-weight: bold;
+  letter-spacing: 0.06em;
+  text-align: right;
+  opacity: 0.92;
+}
+
+.stamp .row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5em;
+}
+
+.rec {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: #e21;
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+.ammo {
+  position: absolute;
+  left: 4vw;
+  bottom: 4vh;
+  font-size: clamp(11px, 1.3vw, 18px);
+  opacity: 0.55;
+}
+
+.hint {
+  position: absolute;
+  left: 50%;
+  bottom: 12vh;
+  transform: translateX(-50%);
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.hint.show {
+  opacity: 0.8;
+}
+
+.dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.hud.minimal .ammo,
+.hud.minimal .dot {
+  display: none;
+}
+
+.start {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  cursor: pointer;
+}
+
+.start[hidden] {
+  display: none;
+}
+
+.panel {
+  text-align: center;
+  padding: 16px;
+}
+
+.panel h1 {
+  letter-spacing: 0.4em;
+  font-size: clamp(28px, 6vw, 64px);
+  margin: 0 0 0.3em;
+}
+
+.panel .cta {
+  font-size: 18px;
+  animation: blink 1.2s steps(2, start) infinite;
+}
+
+.panel table {
+  margin: 1.5em auto 0;
+  border-collapse: collapse;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.panel td {
+  padding: 2px 10px;
+  text-align: left;
+}
+
+.panel td:first-child {
+  text-align: right;
+  color: #fc6;
+}
