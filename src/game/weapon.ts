@@ -28,7 +28,6 @@ function buildProceduralPistol() {
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = g) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
-    m.castShadow = true;
     m.receiveShadow = true;
     parent.add(m);
     return m;
@@ -79,7 +78,6 @@ function buildArms() {
   const sleeve = new THREE.MeshStandardMaterial({ color: 0x1f2630, roughness: 0.95 });
   const mk = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
     const m = new THREE.Mesh(geo, mat);
-    m.castShadow = true;
     m.receiveShadow = true;
     g.add(m);
     return m;
@@ -165,7 +163,8 @@ export class Weapon {
         const gltf = await new GLTFLoader().loadAsync(await modelUrl(name));
         gltf.scene.traverse((o) => {
           if ((o as THREE.Mesh).isMesh) {
-            o.castShadow = true;
+            // No full body to go with it, so the viewmodel casts no shadow (it also keeps the lamps' cached shadows static).
+            o.castShadow = false;
             o.receiveShadow = true;
           }
         });
@@ -233,7 +232,7 @@ export class Weapon {
       const body = hit.collider.parent();
       const movable = body && !body.isFixed();
       this.effects.impact(hit.point, hit.normal, surface, dir, movable ? hit.tag?.mesh : undefined);
-      this.audio.impact(surface === 'metal' ? 'metal' : surface === 'wood' || surface === 'cardboard' ? 'wood' : surface === 'flesh' ? 'flesh' : 'concrete', hit.distance);
+      this.audio.impact(surface === 'metal' ? 'metal' : surface === 'wood' || surface === 'cardboard' || surface === 'rubber' ? 'wood' : surface === 'flesh' || surface === 'fabric' ? 'flesh' : 'concrete', hit.distance);
       hit.tag?.onHit?.(hit, dir);
       if (body && body.isDynamic()) {
         body.applyImpulseAtPoint(dir.clone().multiplyScalar(2.2), hit.point, true);
@@ -271,7 +270,6 @@ export class Weapon {
     const col = this.physics.world.createCollider(R.ColliderDesc.cylinder(0.0095, 0.0048).setDensity(8000).setRestitution(0.4).setFriction(0.6), body);
     col.setCollisionGroups(GROUP_DEBRIS);
     const mesh = new THREE.Mesh(this.casingGeo, this.brass);
-    mesh.castShadow = true;
     this.scene.add(mesh);
     this.physics.sync(body, mesh);
     this.casings.push({ body, mesh, age: 0, clinked: false });
@@ -331,8 +329,10 @@ export class Weapon {
     this.lagYaw += (THREE.MathUtils.clamp(-av.x * 0.012, -0.08, 0.08) - this.lagYaw) * Math.min(1, 10 * dt);
     this.lagPitch += (THREE.MathUtils.clamp(-av.y * 0.012, -0.08, 0.08) - this.lagPitch) * Math.min(1, 10 * dt);
 
-    const hip = new THREE.Vector3(0.045, -0.125, -0.33);
-    const ads = new THREE.Vector3(0, -0.147, -0.34);
+    // Hip: compressed low ready, right of centre. ADS: sight line on the camera axis (front post
+    // top is 48.8 mm above the pistol origin), arms extended so both forearms rise from the frame edge.
+    const hip = new THREE.Vector3(0.075, -0.15, -0.37);
+    const ads = new THREE.Vector3(0, -0.0488, -0.4);
     const pos = hip.lerp(ads, this.aim);
     const bob = this.player.bob;
     const sprint = this.player.sprinting ? 1 : 0;
@@ -343,8 +343,8 @@ export class Weapon {
     // Hip pose is slightly canted so the side of the slide and both hands read on camera.
     const hipCant = 1 - this.aim;
     this.view.rotation.set(
-      this.kickRot * 0.04 + this.wallBlock * 0.9 + reloadPose * -0.5 - sprint * 0.35 + Math.sin(time * 1.6) * 0.004 + hipCant * 0.03,
-      this.lagYaw + sprint * 0.5 + reloadPose * 0.4 + hipCant * 0.1,
+      this.kickRot * 0.04 + this.wallBlock * 0.9 + reloadPose * -0.5 - sprint * 0.35 + Math.sin(time * 1.6) * 0.004 + hipCant * 0.02,
+      this.lagYaw + sprint * 0.5 + reloadPose * 0.4 + hipCant * 0.14,
       reloadPose * 0.6 + sprint * 0.2 - hipCant * 0.1,
       'YXZ',
     );

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
-import type { HitInfo, Physics } from '../engine/physics';
+import { GROUP_PROP, GROUP_TARGET, type HitInfo, type Physics } from '../engine/physics';
 import type { Materials } from './level';
 
 /** Optional authored assets from the Blender pipeline, keyed by file stem. */
@@ -88,9 +88,9 @@ export class Targets {
 
     const m: Mannequin = { body, group, home: at.clone(), health: 3, down: false, downTime: 0, facing, track, phase: Math.random() * 6 };
     const onHit = (hit: HitInfo, dir: THREE.Vector3) => this.hitMannequin(m, hit, dir);
-    const legs = w.createCollider(R.ColliderDesc.cuboid(0.2, 0.45, 0.12).setTranslation(0, 0.45, 0).setDensity(300), body);
-    const torso = w.createCollider(R.ColliderDesc.cuboid(0.26, 0.35, 0.15).setTranslation(0, 1.22, 0).setDensity(300), body);
-    const head = w.createCollider(R.ColliderDesc.ball(0.12).setTranslation(0, 1.7, 0).setDensity(300), body);
+    const legs = w.createCollider(R.ColliderDesc.cuboid(0.2, 0.45, 0.12).setTranslation(0, 0.45, 0).setDensity(300).setCollisionGroups(GROUP_TARGET), body);
+    const torso = w.createCollider(R.ColliderDesc.cuboid(0.26, 0.35, 0.15).setTranslation(0, 1.22, 0).setDensity(300).setCollisionGroups(GROUP_TARGET), body);
+    const head = w.createCollider(R.ColliderDesc.ball(0.12).setTranslation(0, 1.7, 0).setDensity(300).setCollisionGroups(GROUP_TARGET), body);
     this.physics.tag(legs, { surface: 'flesh', mesh: group, onHit, part: 'legs' });
     this.physics.tag(torso, { surface: 'flesh', mesh: group, onHit, part: 'torso' });
     this.physics.tag(head, { surface: 'flesh', mesh: group, onHit, part: 'head' });
@@ -153,7 +153,7 @@ export class Targets {
     }
 
     const body = w.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(at.x, at.y + 1.05, at.z));
-    const col = w.createCollider(R.ColliderDesc.cylinder(0.006, 0.22), body);
+    const col = w.createCollider(R.ColliderDesc.cylinder(0.006, 0.22).setCollisionGroups(GROUP_TARGET), body);
     const p: Plate = { pivot, body, angle: 0, vel: 0, hinge: pivot.position.clone() };
     this.physics.tag(col, {
       surface: 'metal',
@@ -174,7 +174,7 @@ export class Targets {
     mesh.castShadow = true;
     this.scene.add(mesh);
     const body = this.physics.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(at.x, at.y + 0.061, at.z).setCcdEnabled(true));
-    const col = this.physics.world.createCollider(R.ColliderDesc.cylinder(0.061, 0.033).setDensity(400).setRestitution(0.3), body);
+    const col = this.physics.world.createCollider(R.ColliderDesc.cylinder(0.061, 0.033).setDensity(400).setRestitution(0.3).setCollisionGroups(GROUP_PROP), body);
     this.physics.tag(col, { surface: 'metal', mesh });
     this.physics.sync(body, mesh);
     this.props.push({ body, mesh, home: at.clone().setY(at.y + 0.061) });
@@ -186,10 +186,19 @@ export class Targets {
     mesh.castShadow = mesh.receiveShadow = true;
     this.scene.add(mesh);
     const body = this.physics.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(at.x, at.y + size * 0.4, at.z).setRotation(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.random(), 0))));
-    const col = this.physics.world.createCollider(R.ColliderDesc.cuboid(size / 2, size * 0.4, size / 2).setDensity(120), body);
+    const col = this.physics.world.createCollider(R.ColliderDesc.cuboid(size / 2, size * 0.4, size / 2).setDensity(120).setCollisionGroups(GROUP_PROP), body);
     this.physics.tag(col, { surface: 'cardboard', mesh });
     this.physics.sync(body, mesh);
     this.props.push({ body, mesh, home: at.clone().setY(at.y + size * 0.4) });
+  }
+
+  /** Everything that moves, with a rough radius (for shadow/ambient tracking). */
+  movingObjects(): { object: THREE.Object3D; radius: number }[] {
+    return [
+      ...this.mannequins.map((m) => ({ object: m.group as THREE.Object3D, radius: 1.2 })),
+      ...this.plates.map((p) => ({ object: p.pivot, radius: 0.5 })),
+      ...this.props.map((p) => ({ object: p.mesh, radius: 0.3 })),
+    ];
   }
 
   resetProps() {

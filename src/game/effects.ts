@@ -141,6 +141,8 @@ export class Effects {
       metal: [0.3, 0.3, 0.3],
       flesh: [0.6, 0.55, 0.5],
       glass: [0.8, 0.85, 0.9],
+      fabric: [0.5, 0.46, 0.38],
+      rubber: [0.12, 0.12, 0.12],
     };
     const c = dustColor[surface];
     const count = surface === 'metal' ? 3 : 10;
