@@ -1,10 +1,11 @@
 // Package dist/ for hosts that only serve common web types (e.g. a claude.ai
 // Artifact): inlines the CSS, strips the document skeleton, converts .glb
-// models to embedded glTF JSON (.gltf.json) and points assets.json at them.
+// models and the baked level to embedded glTF JSON (.gltf.json), wraps the
+// level's HDR probe as base64 JSON, and points assets.json at them.
 //
 //   npm run build && node tools/artifact.mjs [outDir]
 // Prints the published-path -> source-path map for the upload.
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, cpSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, cpSync, rmSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const dist = resolve('dist');
@@ -31,8 +32,7 @@ cpSync(join(dist, 'textures'), join(out, 'textures'), { recursive: true });
 for (const f of readdirSync(join(out, 'textures'))) files[`textures/${f}`] = join(out, 'textures', f);
 
 // GLB -> glTF JSON with the binary chunk as a data: URI.
-for (const f of readdirSync(join(dist, 'models')).filter((n) => n.endsWith('.glb'))) {
-  const buf = readFileSync(join(dist, 'models', f));
+function gltfJson(buf) {
   let off = 12;
   let json = null;
   let bin = null;
@@ -45,9 +45,32 @@ for (const f of readdirSync(join(dist, 'models')).filter((n) => n.endsWith('.glb
     off += 8 + len;
   }
   if (bin) json.buffers[0].uri = `data:application/octet-stream;base64,${bin.toString('base64')}`;
+  return JSON.stringify(json);
+}
+
+for (const f of readdirSync(join(dist, 'models')).filter((n) => n.endsWith('.glb'))) {
   const name = f.replace(/\.glb$/, '.gltf.json');
-  writeFileSync(join(out, 'models', name), JSON.stringify(json));
+  writeFileSync(join(out, 'models', name), gltfJson(readFileSync(join(dist, 'models', f))));
   files[`models/${name}`] = join(out, 'models', name);
+}
+
+// The baked level: glTF as above, the HDR probe as a base64 JSON string, images and JSON as they are.
+if (existsSync(join(dist, 'level'))) {
+  mkdirSync(join(out, 'level'), { recursive: true });
+  for (const f of readdirSync(join(dist, 'level'))) {
+    const src = join(dist, 'level', f);
+    let name = f;
+    if (f.endsWith('.glb')) {
+      name = f.replace(/\.glb$/, '.gltf.json');
+      writeFileSync(join(out, 'level', name), gltfJson(readFileSync(src)));
+    } else if (f.endsWith('.hdr')) {
+      name = `${f}.json`;
+      writeFileSync(join(out, 'level', name), JSON.stringify(readFileSync(src).toString('base64')));
+    } else {
+      cpSync(src, join(out, 'level', name));
+    }
+    files[`level/${name}`] = join(out, 'level', name);
+  }
 }
 
 const manifest = JSON.parse(readFileSync(join(dist, 'assets.json'), 'utf8'));

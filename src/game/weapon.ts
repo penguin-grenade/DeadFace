@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { GROUP_DEBRIS, type Physics } from '../engine/physics';
-import { assetManifest, modelUrl } from '../engine/assets';
+import { GROUP_DEBRIS, type HitInfo, type Physics } from '../engine/physics';
+import { assetManifest, gltfLoader, modelUrl } from '../engine/assets';
 import type { Audio } from '../engine/audio';
 import type { Input } from '../engine/input';
 import type { Player } from './player';
@@ -111,6 +110,7 @@ export class Weapon {
   private flashLight: THREE.PointLight;
   readonly flashlight: THREE.SpotLight;
   private flashTime = 0;
+  private ray = new THREE.Raycaster();
 
   ammo = MAG_SIZE;
   reserve = 45;
@@ -160,7 +160,7 @@ export class Weapon {
     const load = async (name: string) => {
       if (!models.includes(name)) return null;
       try {
-        const gltf = await new GLTFLoader().loadAsync(await modelUrl(name));
+        const gltf = await gltfLoader().loadAsync(await modelUrl(name));
         gltf.scene.traverse((o) => {
           if ((o as THREE.Mesh).isMesh) {
             // No full body to go with it, so the viewmodel casts no shadow (it also keeps the lamps' cached shadows static).
@@ -226,13 +226,13 @@ export class Weapon {
     dir.z += (Math.random() - 0.5) * spread;
     dir.normalize();
 
-    const hit = this.physics.raycast(origin, dir, 120, this.player.collider);
+    const hit = this.trace(origin, dir);
     if (hit) {
       const surface = hit.tag?.surface ?? 'concrete';
       const body = hit.collider.parent();
       const movable = body && !body.isFixed();
       this.effects.impact(hit.point, hit.normal, surface, dir, movable ? hit.tag?.mesh : undefined);
-      this.audio.impact(surface === 'metal' ? 'metal' : surface === 'wood' || surface === 'cardboard' || surface === 'rubber' ? 'wood' : surface === 'flesh' || surface === 'fabric' ? 'flesh' : 'concrete', hit.distance);
+      this.audio.impact(surface === 'metal' ? 'metal' : surface === 'wood' || surface === 'cardboard' || surface === 'rubber' || surface === 'fibreglass' ? 'wood' : surface === 'flesh' || surface === 'fabric' ? 'flesh' : 'concrete', hit.distance);
       hit.tag?.onHit?.(hit, dir);
       if (body && body.isDynamic()) {
         body.applyImpulseAtPoint(dir.clone().multiplyScalar(2.2), hit.point, true);
@@ -252,6 +252,35 @@ export class Weapon {
     this.flash.scale.setScalar(0.7 + Math.random() * 0.6);
     this.effects.muzzleSmoke(this.muzzle.getWorldPosition(new THREE.Vector3()).addScaledVector(dir, 0.12), dir);
     this.ejectCasing();
+  }
+
+  /**
+   * The bullet's path. Targets' colliders only approximate their shape, so a hit on one
+   * ('precise' tag) is checked against the visible mesh: it moves onto the surface, or the
+   * bullet carries on past (between the legs, beside an arm).
+   */
+  private trace(origin: THREE.Vector3, dir: THREE.Vector3): HitInfo | null {
+    const passed = new Set<number>();
+    const filter = (c: RAPIER.Collider) => !passed.has(c.parent()?.handle ?? -1);
+    for (let i = 0; i < 4; i++) {
+      const hit = this.physics.raycast(origin, dir, 120, this.player.collider, passed.size ? filter : undefined);
+      if (!hit?.tag?.precise || !hit.tag.mesh) return hit;
+      this.ray.set(origin, dir);
+      this.ray.near = Math.max(0, hit.distance - 0.8);
+      this.ray.far = hit.distance + 0.8;
+      // Decals parented to the target are planes; only the target's own surface counts.
+      const vis = this.ray.intersectObject(hit.tag.mesh, true).find((v) => (v.object as THREE.Mesh).geometry?.type !== 'PlaneGeometry');
+      if (vis) {
+        hit.point.copy(vis.point);
+        hit.distance = vis.distance;
+        if (vis.face) hit.normal.copy(vis.face.normal).transformDirection(vis.object.matrixWorld);
+        return hit;
+      }
+      const body = hit.collider.parent();
+      if (!body) return hit;
+      passed.add(body.handle);
+    }
+    return null;
   }
 
   private ejectCasing() {

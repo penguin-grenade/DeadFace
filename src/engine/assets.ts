@@ -1,3 +1,9 @@
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+
+/** glTF loader that also reads meshopt-compressed files (the pipeline compresses the big meshes). */
+export const gltfLoader = () => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+
 /**
  * public/assets.json lists authored assets produced by the Blender pipeline
  * (blender/build_all.py rewrites it). Anything not listed falls back to the

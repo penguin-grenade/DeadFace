@@ -187,7 +187,7 @@ def join(name, objs):
     return obj
 
 
-def export_glb(path, objects=None):
+def export_glb(path, objects=None, **extra):
     if objects is not None:
         bpy.ops.object.select_all(action="DESELECT")
         for o in objects:
@@ -204,5 +204,6 @@ def export_glb(path, objects=None):
         export_image_format="AUTO",
         export_cameras=False,
         export_lights=False,
+        **extra,
     )
     print(f"wrote {path} ({os.path.getsize(path) / 1024:.0f} KB)")

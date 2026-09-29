@@ -59,6 +59,8 @@ def main():
     run("make_pistol.py", "--out", model_dir)
     run("make_hands.py", "--out", model_dir)
     run("make_props.py", "--out", model_dir, "--textures", tex_dir)
+    run("make_mannequin.py", "--out", model_dir)
+    meshopt(os.path.join(model_dir, "mannequin.glb"))
     if "--level" in argv:
         # Lightmap + probe bake of the warehouse: slow (tens of minutes on a CPU).
         run("build_level.py", "--out", os.path.join(PUBLIC, "level"), "--tex", tex_dir)

@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Renderer, type Quality } from './engine/renderer';
-import { assetManifest, modelUrl } from './engine/assets';
+import { assetManifest, gltfLoader, modelUrl } from './engine/assets';
 import { Physics } from './engine/physics';
 import { Input } from './engine/input';
 import { Audio } from './engine/audio';
@@ -19,7 +18,7 @@ const DEMO = params.has('demo');
 
 async function loadModels(): Promise<ModelLibrary> {
   const lib: ModelLibrary = {};
-  const loader = new GLTFLoader();
+  const loader = gltfLoader();
   const { models } = await assetManifest();
   await Promise.all(
     (['mannequin', 'steel_target', 'can', 'box_small'] as const).map(async (name) => {

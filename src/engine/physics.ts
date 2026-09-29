@@ -1,7 +1,7 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 
-export type SurfaceKind = 'metal' | 'concrete' | 'wood' | 'flesh' | 'plaster' | 'cardboard' | 'glass' | 'fabric' | 'rubber';
+export type SurfaceKind = 'metal' | 'concrete' | 'wood' | 'flesh' | 'plaster' | 'cardboard' | 'glass' | 'fabric' | 'rubber' | 'fibreglass';
 
 export interface HitInfo {
   point: THREE.Vector3;
@@ -19,6 +19,8 @@ export interface ColliderTag {
   /** Optional hit handler, e.g. a target reacting to damage. */
   onHit?: (hit: HitInfo, dir: THREE.Vector3) => void;
   part?: string;
+  /** The collider only approximates `mesh`: bullets confirm the hit against the visible surface. */
+  precise?: boolean;
 }
 
 /**
@@ -139,9 +141,9 @@ export class Physics {
     }
   }
 
-  raycast(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, exclude?: RAPIER.Collider): HitInfo | null {
+  raycast(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, exclude?: RAPIER.Collider, filter?: (c: RAPIER.Collider) => boolean): HitInfo | null {
     const ray = new RAPIER.Ray(origin, dir);
-    const hit = this.world.castRayAndGetNormal(ray, maxDist, true, undefined, QUERY_SHOT, exclude);
+    const hit = this.world.castRayAndGetNormal(ray, maxDist, true, undefined, QUERY_SHOT, exclude, undefined, filter);
     if (!hit) return null;
     const point = origin.clone().addScaledVector(dir, hit.timeOfImpact);
     return {

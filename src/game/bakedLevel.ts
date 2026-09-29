@@ -1,9 +1,7 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js';
-import { assetManifest, assetUrl } from '../engine/assets';
+import { assetManifest, assetUrl, gltfLoader } from '../engine/assets';
 import type { Physics, SurfaceKind } from '../engine/physics';
 import type { Level } from './level';
 import type { MoonShafts } from '../engine/postfx';
@@ -196,11 +194,10 @@ export async function loadBakedLevel(scene: THREE.Scene, physics: Physics, rende
     return p;
   };
 
-  const gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   const levelFile = modelSuffix === '.glb' ? 'level.glb' : `level${modelSuffix}`;
   const probeFile = modelSuffix === '.glb' ? json.probe.file : `${json.probe.file}.json`;
   const [gltf, lightMap, mask, probeTex] = await Promise.all([
-    gltfLoader.loadAsync(`${base}${levelFile}`),
+    gltfLoader().loadAsync(`${base}${levelFile}`),
     json.lightmap ? loadTex(`${base}${json.lightmap.file}`, true, false) : Promise.resolve(null),
     json.mask ? loadTex(`${base}${json.mask.file}`, false, false) : Promise.resolve(null),
     loadHDR(`${base}${probeFile}`),

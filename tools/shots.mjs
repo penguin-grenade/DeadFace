@@ -27,6 +27,9 @@ const VIEWS = {
   // Weapon close-ups under the spawn work light (aim = hold right mouse).
   gun: { pos: [0.4, 0, 4.4], yaw: 0.25, pitch: -0.2 },
   gun_ads: { pos: [0.4, 0, 4.4], yaw: 0.25, pitch: -0.2, aim: true },
+  // Range mannequins: up close (the one at x 4.3, z -7) and down the range.
+  dummy: { pos: [3.63, 0, -4.9], yaw: -0.31, pitch: -0.12 },
+  dummy_far: { pos: [1.2, 0, 0.5], yaw: -0.28, pitch: -0.08 },
 };
 
 const names = process.argv.slice(2).filter((a) => !a.startsWith('-'));
