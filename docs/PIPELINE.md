@@ -24,7 +24,7 @@ missing, so a partial asset set still runs.
 | --- | --- | --- |
 | `bake_textures.py` | `public/textures/<name>_{albedo,normal,roughness}.jpg` | Procedural node materials baked with Cycles. UVs are wrapped onto a 4D torus and fed to 4D noise, so every set tiles without seams. |
 | `make_pistol.py` | `pistol.glb` | Hard-surface model: extruded/lofted profiles, exact booleans (ejection port, serrations, sight notch), 0.4–0.6 mm machined bevels with hardened normals, baked 2K PBR atlas. |
-| `make_hands.py` | `arms.glb` | MIT WebXR hand mesh posed on the grip by a collision-aware grasp solver (joints curl until a phalanx touches the grip) with CCD thumbs, inflated into gloves with cuffs and sleeves, baked like the pistol. |
+| `make_hands.py` | `arms.glb` | MIT WebXR hand mesh posed on the grip by a collision-aware grasp solver (joints curl until a phalanx touches the grip) with CCD thumbs, inflated into gloves with gauntlet cuffs. Full softshell sleeves run from the glove to the shoulder (bunching above the wrist, twist folds, folds in the crook of the elbow, two-piece seams with topstitching) on a skinned upper arm / forearm / hand rig, baked like the pistol. |
 | `make_mannequin.py` | `mannequin.glb` | Training mannequin sculpted as a signed distance field, with an "analytic" high-to-low normal bake, bullet damage and a plate carrier. See below. |
 | `make_props.py` | `steel_target.glb`, `can.glb`, `box_small.glb` | Hanging AR500 plate on a stand, soda can, cardboard box with the baked cardboard set. |
 | `build_level.py` | `public/level/*` | The "Range 4" warehouse: geometry from `levelkit.py` and `level_props.py`, Cycles lightmap, wet/grime/specular-occlusion mask, HDR reflection probe, colliders, lights and gameplay spots in `level.json`. |
@@ -82,7 +82,12 @@ geometry-only check.
 - **Weapon nodes** (found by name in `src/game/weapon.ts`): `Slide` (origin at
   the weapon origin, the game offsets its local Z to cycle it), and the empties
   `Muzzle`, `Ejection`, `LightMount`. **Arms** share the pistol's origin so both
-  parent to one viewmodel pivot.
+  parent to one viewmodel pivot. They are skinned to bones `upper_R`, `fore_R`,
+  `twist_R`, `hand_R` (and `_L`), modelled in the aim pose; `src/game/arms.ts`
+  solves two-bone IK every frame from fixed shoulders beside the chest camera to
+  the hands on the gun, so the elbows follow the gun when it's lowered, raised by
+  a wall, canted or reloaded. The shoulder and elbow-direction constants in
+  `arms.ts` and `make_hands.py` must match.
 - **Mannequin:** origin at the floor under the stand, about 1.85 m tall on a
   12 mm steel base plate. The hit colliders in `src/game/targets.ts` are fitted
   to this model part by part (head, neck, torso, arms, legs, stand); a hit on a

@@ -27,6 +27,9 @@ const VIEWS = {
   // Weapon close-ups under the spawn work light (aim = hold right mouse).
   gun: { pos: [0.4, 0, 4.4], yaw: 0.25, pitch: -0.2 },
   gun_ads: { pos: [0.4, 0, 4.4], yaw: 0.25, pitch: -0.2, aim: true },
+  // Aiming with a wall this close (m) in front: the muzzle comes up and back.
+  wall_ads: { pos: [0, 0, 6.5], yaw: 3.14, pitch: 0, aim: true, wall: 0.5 },
+  wall_hip: { pos: [0, 0, 6.5], yaw: 3.14, pitch: 0, wall: 0.5 },
   // Range mannequins: up close (the one at x 4.3, z -7) and down the range.
   dummy: { pos: [3.63, 0, -4.9], yaw: -0.31, pitch: -0.12 },
   dummy_far: { pos: [1.2, 0, 0.5], yaw: -0.28, pitch: -0.08 },
@@ -76,6 +79,25 @@ for (const name of list) {
     g.player.velocity.set(0, 0, 0);
     g.weapon.input.aim = !!v.aim;
   }, v);
+  if (v.wall) {
+    // Walk forward until the nearest wall ahead is v.wall away.
+    const moved = await page.evaluate(async (d) => {
+      const g = window.__game;
+      // Wait for the camera to reach the new spot.
+      for (let i = 0; i < 3; i++) await new Promise(requestAnimationFrame);
+      const o = g.player.camera.getWorldPosition(g.player.forward.clone());
+      const f = g.player.forward.clone();
+      const hit = g.physics.raycast(o, f, 40, g.player.collider);
+      if (!hit) return 'no wall ahead';
+      const t = g.player.body.translation();
+      const k = (hit.distance - d) / Math.max(0.2, Math.hypot(f.x, f.z));
+      const p = { x: t.x + f.x * k, y: t.y, z: t.z + f.z * k };
+      g.player.body.setTranslation(p, true);
+      g.player.body.setNextKinematicTranslation(p);
+      return `wall ${hit.distance.toFixed(2)} m ahead, moved ${k.toFixed(2)} m`;
+    }, v.wall);
+    console.log(name, moved);
+  }
   // Let springs, auto exposure and shadow caches settle.
   await page.waitForTimeout(Number(process.env.SETTLE || 5000));
   await page.screenshot({ path: `${outDir}/${name}.png` });

@@ -41,7 +41,7 @@ procedural range instead of the baked warehouse.
 | **Box-projected, normalised reflections.** One probe, projected onto the hall and dimmed wherever the surface is darker than the probe spot, so corners and the office don't glow. Moving objects take their ambient level from the lightmap under them. | `levelShading.ts`, `bakedLevel.ts` |
 | **Camera pipeline.** HDR + MSAA, raymarched volumetric light shafts through the lamps' shadow maps, energy-conserving bloom, GPU auto exposure, AgX tone curve. | `src/engine/postfx.ts` |
 | **Bodycam lens and sensor.** Barrel distortion with per-channel chromatic aberration, motion blur from camera rotation, over-sharpening, shadow-weighted grain, vignette, timestamp overlay. | `src/engine/BodycamShader.ts` |
-| **Hero assets.** Hard-surface pistol with machined bevels; gloved hands posed on the grip by a grasp solver; mannequins sculpted as distance fields with exactly baked detail normals, bullet damage, duct tape and marker, stitching and name tapes. All with baked 2K PBR atlases. | `blender/make_pistol.py`, `make_hands.py`, `make_mannequin.py` |
+| **Hero assets.** Hard-surface pistol with machined bevels; gloved hands posed on the grip by a grasp solver, on jacket-sleeved arms whose elbows follow the gun with IK; mannequins sculpted as distance fields with exactly baked detail normals, bullet damage, duct tape and marker, stitching and name tapes. All with baked 2K PBR atlases. | `blender/make_pistol.py`, `make_hands.py`, `make_mannequin.py` |
 | **Movement and weapon feel.** Chest-mounted camera height, rotational inertia, gait bob, strafe roll, landing dip, recoil springs, muzzle climb, weapon lag, wall-proximity muzzle raise. | `src/game/player.ts`, `weapon.ts` |
 | **Audio.** Synthesized gunshot crack/body/thump through a waveshaper + compressor into a concrete reverb: the clipped cheap-mic sound of real bodycam footage. | `src/engine/audio.ts` |
 
@@ -96,6 +96,6 @@ the automatic look-around + fire loop without pointer lock.
 ## Next steps worth doing
 
 - Enemy AI on a navmesh (recast-navigation-js) with rigged, animated characters.
-- An armature for the hands, with reload, inspect and draw animations.
+- Finger bones on the arm rig, with reload, inspect and draw animations.
 - KTX2/Basis texture compression to cut download size and GPU memory.
 - Recorded foley and impulse responses in place of the synthesized audio.

@@ -5,6 +5,7 @@ import { assetManifest, loadGLTF, reportAssetProblem } from '../engine/assets';
 import type { Audio } from '../engine/audio';
 import type { Input } from '../engine/input';
 import type { Player } from './player';
+import { ArmRig } from './arms';
 import type { Effects } from './effects';
 import { flashSprite } from './textures';
 
@@ -111,6 +112,7 @@ export class Weapon {
   readonly flashlight: THREE.SpotLight;
   private flashTime = 0;
   private ray = new THREE.Raycaster();
+  private rig: ArmRig | null = null;
 
   ammo = MAG_SIZE;
   reserve = 45;
@@ -183,6 +185,7 @@ export class Weapon {
 
     this.view.add(this.model);
     this.view.add(arms ?? buildArms());
+    this.rig = arms ? ArmRig.from(arms) : null;
     this.muzzle.add(this.flash);
     this.muzzle.add(this.flashLight);
     this.flashLight.position.set(0, 0, -0.05);
@@ -361,7 +364,7 @@ export class Weapon {
     // Hip: compressed low ready, right of centre. ADS: sight line on the camera axis (front post
     // top is 48.8 mm above the pistol origin), arms extended so both forearms rise from the frame edge.
     const hip = new THREE.Vector3(0.075, -0.15, -0.37);
-    const ads = new THREE.Vector3(0, -0.0488, -0.4);
+    const ads = new THREE.Vector3(0, -0.0488, -0.5);
     const pos = hip.lerp(ads, this.aim);
     const bob = this.player.bob;
     const sprint = this.player.sprinting ? 1 : 0;
@@ -377,6 +380,7 @@ export class Weapon {
       reloadPose * 0.6 + sprint * 0.2 - hipCant * 0.1,
       'YXZ',
     );
+    this.rig?.update(this.player.camera);
 
     if (this.slide) {
       this.slideT = Math.min(1, this.slideT + dt / 0.07);

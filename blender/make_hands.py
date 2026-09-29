@@ -51,12 +51,17 @@ SURF = {
     "Glove":   (1, (0.030, 0.031, 0.032), 0.0, 0.82),   # split into nylon/suede/guard by painted fields
     "Rubber":  (3, (0.020, 0.020, 0.021), 0.0, 0.50),
     "Cuff":    (4, (0.026, 0.026, 0.027), 0.0, 0.70),
-    "Sleeve":  (5, (0.040, 0.042, 0.043), 0.0, 0.84),   # charcoal softshell
+    "Sleeve":  (5, (0.018, 0.021, 0.030), 0.0, 0.84),   # navy-black softshell
 }
-NYLON = ((0.030, 0.031, 0.032), 0.80)
+NYLON = ((0.025, 0.025, 0.027), 0.80)
 SUEDE = ((0.062, 0.058, 0.052), 0.90)
 GUARD = ((0.018, 0.018, 0.019), 0.48)
 THREAD = (0.11, 0.11, 0.10)
+# Sleeve seams (flat-felled, two rows of topstitching) and the elastic hem band, in metres.
+SEAM_HALF = 0.0040
+STITCH_OFF = 0.0026
+STITCH_PITCH = 0.0040
+HEM_BAND = 0.034
 
 
 def rot(axis, angle):
@@ -395,13 +400,18 @@ def pose_right(hand, col):
     print(f"  right thumb error {err * 1000:.1f} mm, pushed {push}", flush=True)
 
 
+# Support wrist: behind and below the knuckles, so the forearm runs back and down from a
+# thumbs-forward grip instead of rising over the slide.
+LEFT_WRIST = (-0.060, -0.062, -0.052)
+
+
 def pose_left(hand, col):
     # Support hand: palm heel on the left panel, fingers wrapping over the firing hand's fingers.
     res = hand.fit({
         "index-finger-phalanx-proximal": (-0.034, 0.022, -0.040),
         "middle-finger-phalanx-proximal": (-0.036, 0.012, -0.058),
         "pinky-finger-phalanx-proximal": (-0.032, -0.010, -0.090),
-        "wrist": (-0.058, -0.046, 0.005),
+        "wrist": LEFT_WRIST,
     })
     print(f"  left fit residuals (mm) {res}", flush=True)
     n = hand.R @ hand.palm
@@ -505,26 +515,68 @@ def tube(name, path, radii, mat, n=40, up=(0, 0, 1), folds=None, cap=False):
     return obj
 
 
-def slerp(a, b, f):
-    a, b = unit(a), unit(b)
-    ang = math.acos(float(np.clip(a @ b, -1, 1)))
-    if ang < 1e-6:
-        return a
-    return unit((math.sin((1 - f) * ang) * a + math.sin(f * ang) * b) / math.sin(ang))
+# ----------------------------------------------------------------------------- arm rig
+# src/game/arms.ts poses the arms every frame with two-bone IK: the shoulders stay put beside the
+# chest camera and the hands stay on the pistol, so the elbows follow the gun as it is raised,
+# lowered, canted and kicked back. The mesh is built and skinned in the rest pose below, the aim
+# pose, and the numbers here must match arms.ts and weapon.ts.
+REST_VIEW = (0.0, -0.0488, -0.50)     # pistol origin in camera space (three.js axes) when aiming
+SHOULDER = (0.185, -0.03, 0.10)       # right shoulder joint, camera space; the left mirrors x
+POLE = (1.0, -0.6, 0.2)               # the way the right elbow points, camera space; the left mirrors x
+UPPER, FORE = 0.31, 0.25              # shoulder to elbow, elbow to wrist (m)
+WRIST_IN = 0.010                      # the wrist joint sits this far up the forearm from the glove opening
+HEM = 0.026                           # the jacket sleeve starts this far up the glove cuff
 
 
-def sleeve_for(hand, elbow, mats, seed, max_bend=40.0):
+def cam_point(p):
+    """Camera space (three.js axes) -> pistol space (Blender axes), in the rest pose."""
+    x, y, z = np.asarray(p, float) - np.asarray(REST_VIEW)
+    return np.array((x, -z, y))
+
+
+def cam_dir(d):
+    x, y, z = d
+    return unit(np.array((x, -z, y), float))
+
+
+def reach(S, W, a, b):
+    """When the hand is out of reach the shoulder comes forward along the arm, as in arms.ts."""
+    d = W - S
+    L = float(np.linalg.norm(d))
+    lim = a + b - 0.002
+    return W - d / L * lim if L > lim else S
+
+
+def elbow_ik(S, W, a, b, pole):
+    """Two-bone IK: the elbow on the side of `pole`, upper arm a, forearm b."""
+    d = W - S
+    L = float(np.linalg.norm(d))
+    u = d / L
+    ca = float(np.clip((a * a + L * L - b * b) / (2 * a * L), -1, 1))
+    v = unit(pole - u * (pole @ u))
+    return S + a * (ca * u + math.sqrt(1 - ca * ca) * v)
+
+
+def arm_joints(hand):
     ctr, axis, major, rx, ry = wrist_ring(hand)
-    rng = np.random.default_rng(seed)
-    elbow = np.asarray(elbow, float)
-    # The wrist flexes towards the elbow (at most max_bend degrees); the sleeve takes up the rest.
-    to_elbow = unit(elbow - ctr)
+    m = np.array((hand.side, 1, 1), float)
+    W = ctr + axis * WRIST_IN
+    S = reach(cam_point(np.array(SHOULDER) * m), W, UPPER, FORE)
+    E = elbow_ik(S, W, UPPER, FORE, cam_dir(np.array(POLE) * m))
+    return S, E, W
+
+
+def cuff_frame(hand, E, W, max_bend=22.0):
+    """The glove gauntlet leaves the hand along the hand's axis and bends (at most max_bend
+    degrees) towards the forearm, so the wrist bend is shared between cuff and sleeve.
+    Returns (point, tangent) at arc length s from the glove opening."""
+    ctr, axis, *_ = wrist_ring(hand)
+    to_elbow = unit(E - W)
     ang = math.degrees(math.acos(float(np.clip(axis @ to_elbow, -1, 1))))
     fore = slerp(axis, to_elbow, min(1.0, max_bend / max(ang, 1e-6)))
     start = ctr - axis * 0.004
 
     def along(s):
-        """Centre and tangent at arc length s of the cuff, bending from the hand axis to the forearm."""
         n = 24
         p, t = start.copy(), axis
         for i in range(n):
@@ -533,56 +585,213 @@ def sleeve_for(hand, elbow, mats, seed, max_bend=40.0):
             p = p + t * (s / n)
         return p, t
 
-    # glove cuff with a velcro strap, starting just inside the hand opening
-    cuff_path = [along(s)[0] for s in np.linspace(0, 0.045, 10)]
+    return along
+
+
+def slerp(a, b, f):
+    a, b = unit(a), unit(b)
+    ang = math.acos(float(np.clip(a @ b, -1, 1)))
+    if ang < 1e-6:
+        return a
+    return unit((math.sin((1 - f) * ang) * a + math.sin(f * ang) * b) / math.sin(ang))
+
+
+def glove_cuff(hand, along, mats):
+    """The glove's gauntlet and velcro strap, rigid with the hand."""
+    ctr, axis, major, rx, ry = wrist_ring(hand)
     cx, cy = rx + GLOVE + 0.0022, ry + GLOVE + 0.0022
-    cuff = tube("cuff", cuff_path, [(cx, cy)] * 10, mats["Cuff"], n=36, up=major)
-    strap_path = [along(s)[0] for s in np.linspace(0.010, 0.032, 6)]
-    strap = tube("strap", strap_path, [(cx + 0.0022, cy + 0.0022)] * 6, mats["Rubber"], n=36, up=major, cap=True)
-    # jacket sleeve: leaves the cuff along the forearm, then sags towards the elbow;
-    # loose, with compression folds near the wrist and a rolled hem.
-    s0, t0 = along(0.020)
-    ctrl = s0 + fore * 0.10
-    L = np.linalg.norm(elbow - s0)
-    steps = 26
-    phase = rng.uniform(0, 6.28, 4)
+    cuff = tube("cuff", [along(t)[0] for t in np.linspace(0, 0.044, 12)], [(cx, cy)] * 12, mats["Cuff"], n=40, up=major)
+    strap = tube("strap", [along(t)[0] for t in np.linspace(0.010, 0.030, 6)], [(cx + 0.0022, cy + 0.0022)] * 6,
+                 mats["Rubber"], n=40, up=major, cap=True)
+    return [cuff, strap], max(cx, cy)
 
-    def bez(u):
-        return (1 - u) ** 2 * s0 + 2 * (1 - u) * u * ctrl + u ** 2 * elbow
 
-    def bez_t(u):
-        return unit(2 * (1 - u) * (ctrl - s0) + 2 * u * (elbow - ctrl))
+def _resample(P, spacing):
+    seg = np.linalg.norm(np.diff(P, axis=0), axis=1)
+    s = np.concatenate([[0.0], np.cumsum(seg)])
+    t = np.arange(0.0, s[-1], spacing)
+    t = np.append(t, s[-1]) if s[-1] - t[-1] > spacing * 0.3 else np.append(t[:-1], s[-1])
+    return np.stack([np.interp(t, s, P[:, k]) for k in range(3)], 1), t
 
-    def folds(u, a):
-        ring = 0.05 * math.sin(u * 38 + phase[0]) * math.exp(-u * 2.2)
-        wrinkle = 0.035 * math.sin(a * 3 + u * 9 + phase[1]) * math.sin(u * 22 + phase[2])
-        return (ring + wrinkle) * min(1.0, u * 10)
 
-    r0x, r0y = cx + 0.0032, cy + 0.0032
-    spec = []   # (centre, tangent, rx, ry, fold u or None)
-    for off, dr in ((0.010, -0.0026), (0.002, -0.0021), (-0.0006, -0.0010)):
-        spec.append((s0 + t0 * off, t0, r0x + dr, r0y + dr, None))
-    for i in range(steps + 1):
-        u = i / steps
-        grow = 0.016 * u ** 0.8
-        spec.append((bez(u), bez_t(u), r0x + grow, r0y + grow * 1.1, u))
-    loops = []
-    for p, t, rx, ry, u in spec:
-        uu = unit(major - t * np.dot(major, t))
-        vv = np.cross(t, uu)
-        ring = []
-        for k in range(48):
-            a = 2 * math.pi * k / 48
-            r = 1.0 + (folds(u, a) if u is not None else 0.0)
-            ring.append(tuple(p + (uu * math.cos(a) * rx + vv * math.sin(a) * ry) * r))
-        loops.append(ring)
-    sleeve = hs.loft("sleeve", loops, mats["Sleeve"], cap_start=False, cap_end=True)
-    sleeve.data.shade_smooth()
-    return [cuff, strap, sleeve], L
+def sleeve_centreline(along, S, E, W):
+    """Hem -> wrist bend -> forearm -> rounded elbow -> upper arm -> into the shoulder. Returns
+    points 2 mm apart and the arc length of the elbow and shoulder along it."""
+    h0, t0 = along(HEM + 0.004)
+    q = W + (E - W) * 0.30
+    ctrl = h0 + t0 * 0.045
+    bez = [(1 - t) ** 2 * h0 + 2 * (1 - t) * t * ctrl + t * t * q for t in np.linspace(0, 1, 60)]
+    fore = [q + (E - q) * t for t in np.linspace(0, 1, 120)[1:]]
+    upper = [E + (S - E) * t for t in np.linspace(0, 1, 120)[1:]]
+    tail = [S + unit(S - E) * 0.07 * t for t in np.linspace(0, 1, 20)[1:]]
+    P, s = _resample(np.array(bez + fore + upper + tail), 0.002)
+    # Round the elbow like a sleeve over a bent arm (the hem end stays exact).
+    k = 11                                                     # ~2 cm Gaussian
+    w = np.exp(-0.5 * (np.arange(-3 * k, 3 * k + 1) / k) ** 2)
+    w /= w.sum()
+    pad = np.concatenate([np.repeat(P[:1], 3 * k, 0), P, np.repeat(P[-1:], 3 * k, 0)])
+    Ps = np.stack([np.convolve(pad[:, j], w, mode="valid") for j in range(3)], 1)
+    keep = np.clip((s - 0.03) / 0.05, 0, 1)[:, None]
+    P = P * (1 - keep) + Ps * keep
+    P, s = _resample(P, 0.002)
+    s_e = s[np.argmin(np.linalg.norm(P - E, axis=1))]
+    s_s = s[np.argmin(np.linalg.norm(P - S, axis=1))]
+    s_q = s[np.argmin(np.linalg.norm(P - q, axis=1))]
+    return P, s, s_q, s_e, s_s
+
+
+def sleeve_mesh(hand, along, S, E, W, cuff_r, mats, seed):
+    """Softshell jacket sleeve from the glove cuff to the shoulder: tight hem band, fabric bunched
+    above the wrist, shallow twist folds down the forearm, folds in the crook of the elbow, a
+    looser upper arm. Returns the object and per-vertex bone weights."""
+    rng = np.random.default_rng(seed)
+    side = hand.side
+    ctr, axis, major, *_ = wrist_ring(hand)
+    P, s, s_q, s_e, s_s = sleeve_centreline(along, S, E, W)
+    # Rings: dense where the folds are, sparser up the upper arm.
+    step = np.where((s < 0.16) | (np.abs(s - s_e) < 0.09), 0.0025, 0.006)
+    idx = [0]
+    while s[idx[-1]] < s[-1] - 1e-9:
+        nxt = np.searchsorted(s, s[idx[-1]] + step[idx[-1]])
+        idx.append(min(nxt, len(s) - 1))
+    idx = np.array(sorted(set(idx)))
+    C, sr = P[idx], s[idx]
+    T = np.gradient(C, axis=0)
+    T /= np.linalg.norm(T, axis=1, keepdims=True)
+    # parallel-transported frames from the glove's major axis
+    Nn = np.zeros_like(C)
+    n = unit(major - T[0] * (major @ T[0]))
+    for i in range(len(C)):
+        n = unit(n - T[i] * (n @ T[i]))
+        Nn[i] = n
+    B = np.cross(T, Nn)
+    # the crook of the elbow faces the bisector of the two arm segments
+    inside = unit(unit(S - E) + unit(W - E))
+    ie = int(np.argmin(np.abs(sr - s_e)))
+    th_in = math.atan2(inside @ B[ie], inside @ Nn[ie])
+    # two-piece sleeve: the front seam runs along the top of the forearm (thumb side, towards the
+    # middle), the back seam over the point of the elbow
+    seams = (unit(np.array((-0.5 * side, 0.0, 1.0))), unit(np.array((side, 0.0, -0.5))))
+    ph = rng.uniform(0, 2 * math.pi, 16)
+
+    def wrap(a):
+        return (a + math.pi) % (2 * math.pi) - math.pi
+
+    def radius(x):
+        keys = [(0.0, cuff_r + 0.0042), (0.030, cuff_r + 0.0048), (0.056, 0.037), (0.12, 0.040),
+                ((s_q + s_e) * 0.5, 0.042), (s_e, 0.046), ((s_e + s_s) * 0.5, 0.050), (s_s, 0.054), (sr[-1], 0.056)]
+        xs, ys = zip(*sorted(keys))
+        return float(np.interp(x, xs, ys))
+
+    ridges = [(0.040, 0.0045, 0.17), (0.055, 0.0050, 0.21), (0.071, 0.0055, 0.19), (0.090, 0.0060, 0.15), (0.112, 0.0070, 0.10)]
+    NA = 56
+    th = np.arange(NA) * 2 * math.pi / NA
+    rings, attrs, attrs2, attrs3, weights = [], [], [], [], []
+    for i, (c, t, nn, bb, x) in enumerate(zip(C, T, Nn, B, sr)):
+        r = radius(x)
+        ell = 1.0 + 0.08 * (1 - tb.smoothstep(s_e - 0.06, s_e + 0.04, x))      # flatter forearm
+        f = np.zeros(NA)
+        ridge = np.zeros(NA)
+        if x < 0.034:
+            # hem band: a rolled edge, then a smooth elastic band
+            f += 0.06 * tb.smoothstep(0.004, 0.0, x) * -1 + 0.02 * np.sin(th * 7 + ph[0]) * tb.smoothstep(0.0, 0.01, x)
+        for k, (sk, wk, ak) in enumerate(ridges):
+            pos = sk + 0.006 * np.sin(th + ph[k]) + 0.004 * np.sin(2 * th + ph[k + 5])
+            amp = ak * (0.55 + 0.45 * np.sin(th + ph[k + 10]))
+            g = np.exp(-((x - pos) / wk) ** 2)
+            f += amp * g
+            ridge = np.maximum(ridge, g * amp / 0.2)
+        # long, shallow twist folds down the forearm
+        win = tb.smoothstep(0.10, 0.16, x) * tb.smoothstep(s_e - 0.02, s_e - 0.08, x)
+        for k in range(3):
+            a0 = ph[k] + (x - 0.1) * (7.0 if k % 2 else -5.0)
+            g = np.exp(-(np.array([wrap(a - a0) for a in th]) / 0.30) ** 2) * win
+            f += 0.06 * g
+            ridge = np.maximum(ridge, g * 0.4)
+        # the crook of the elbow: short folds fanning out from the inside, stretched smooth outside
+        d_in = np.array([wrap(a - th_in) for a in th])
+        crook = np.exp(-(d_in / 1.0) ** 2)
+        for k in range(4):
+            sk = s_e + (-0.045 + 0.030 * k) + 0.012 * d_in * (k - 1.5) / 1.5
+            g = np.exp(-((x - sk) / 0.0075) ** 2) * crook
+            f += 0.14 * g
+            ridge = np.maximum(ridge, g)
+        # upper arm: a couple of soft sags under the arm
+        sag = np.exp(-(np.array([wrap(a - th_in - math.pi * 0.35) for a in th]) / 0.8) ** 2)
+        for k, sk in enumerate((s_e + 0.07, s_e + 0.13)):
+            f += 0.05 * sag * np.exp(-((x - sk) / 0.02) ** 2)
+        # general lumpiness
+        f += 0.025 * np.sin(th * 3 + x * 23 + ph[3]) * np.sin(x * 41 + ph[4])
+        ring = c + (np.outer(np.cos(th) * r * ell, nn) + np.outer(np.sin(th) * r, bb)) * (1 + f)[:, None]
+        rings.append([tuple(p) for p in ring])
+        # Where the seams are, for the material and the texture bake: the angle from each seam as
+        # (cos, sin), which interpolates exactly across the 6 degree faces, the arc length from
+        # the hem and the ring radius (x10).
+        phi = [th - math.atan2(sd @ bb, sd @ nn) for sd in (unit(d - t * (d @ t)) for d in seams)]
+        one = np.ones(NA)
+        attrs.append(np.stack([np.cos(phi[0]), np.sin(phi[0]), x * one, one], 1))
+        attrs2.append(np.stack([np.cos(phi[1]), np.sin(phi[1]), r * 10 * one, one], 1))
+        attrs3.append(np.stack([np.clip(ridge, 0, 1), 0 * one, 0 * one, one], 1))
+        # bone weights: hand -> wrist bend -> twist (forearm) -> fore (elbow end) -> upper arm
+        h = 1 - tb.smoothstep(0.02, 0.07, x)
+        tf = float(np.clip((x - s_q) / max(s_e - s_q, 1e-6), 0, 1))
+        e = tb.smoothstep(s_e - 0.045, s_e + 0.045, x)
+        wv = np.array([h, (1 - h) * (1 - e) * (1 - tf), (1 - h) * (1 - e) * tf, (1 - h) * e])
+        weights.append(np.tile(wv / wv.sum(), (NA, 1)))
+    # tuck the hem edge in against the glove cuff so there's no gap to see into
+    t0 = T[0]
+    inner = [tuple(C[0] - t0 * 0.001 + (np.cos(a) * Nn[0] + np.sin(a) * B[0]) * (cuff_r + 0.0008)) for a in th]
+    rings.insert(0, inner)
+    for a in (attrs, attrs2, attrs3, weights):
+        a.insert(0, a[0])
+    obj = hs.loft("sleeve", rings, mats["Sleeve"], cap_start=False, cap_end=True)
+    obj.data.shade_smooth()
+    # loft vertex order: ring by ring, then the end cap reuses the last ring's vertices
+    Wt = np.concatenate(weights)
+    nv = len(obj.data.vertices)
+    for name, a in (("sleeve", attrs), ("sleeve2", attrs2), ("sleeve3", attrs3)):
+        A = np.concatenate(a)
+        assert nv == len(A), (nv, len(A))
+        at = obj.data.color_attributes.new(name, "FLOAT_COLOR", "POINT")
+        at.data.foreach_set("color", A.astype(np.float32).ravel())
+    return obj, Wt
+
+
+BONES = ("hand", "twist", "fore", "upper")
+
+
+def add_weights(obj, sfx, weights=None):
+    """Vertex groups for one arm; `weights` is (n, 4) in BONES order, or None for all-hand."""
+    groups = {b: obj.vertex_groups.new(name=f"{b}_{sfx}") for b in BONES}
+    n = len(obj.data.vertices)
+    W = np.zeros((n, 4)) if weights is None else weights
+    if weights is None:
+        W[:, 0] = 1.0
+    for k, b in enumerate(BONES):
+        g = groups[b]
+        for vi in np.nonzero(W[:, k] > 1e-4)[0]:
+            g.add([int(vi)], float(W[vi, k]), "REPLACE")
+
+
+def build_rig(joints):
+    """Armature with an unparented chain per arm: upper, fore and twist (both elbow -> wrist;
+    arms.ts twists the second one with the hand) and hand."""
+    arm = bpy.data.armatures.new("ArmsRig")
+    rig = bpy.data.objects.new("ArmsRig", arm)
+    bpy.context.scene.collection.objects.link(rig)
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.mode_set(mode="EDIT")
+    for sfx, (S, E, W, hand_dir) in joints.items():
+        for name, head, tail in (("upper", S, E), ("fore", E, W), ("twist", E, W), ("hand", W, W + hand_dir * 0.08)):
+            b = arm.edit_bones.new(f"{name}_{sfx}")
+            b.head, b.tail = Vector(tuple(head)), Vector(tuple(tail))
+            b.use_deform = True
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return rig
 
 
 # ----------------------------------------------------------------------------- textures
-def composite(ids, cover, aoe, pos, nrm, tnrm, bmin, bmax, fields):
+def composite(ids, cover, aoe, pos, nrm, tnrm, bmin, bmax, fields, sleeve):
     h, w = ids.shape
     ao, edge, cav = aoe[..., 0], aoe[..., 1], aoe[..., 2]
     p01 = (pos - bmin) / (bmax - bmin).max()
@@ -608,6 +817,16 @@ def composite(ids, cover, aoe, pos, nrm, tnrm, bmin, bmax, fields):
     gb = gb * (1 - (seam * dash)[..., None]) + np.array(THREAD, np.float32) * (seam * dash)[..., None]
     base[g] = gb[g]
     rough[g] = gr[g]
+    # Sleeves: seams with darker grooves either side, faintly lighter thread, a slightly darker
+    # and smoother hem band, and fabric faded along the tops of the folds.
+    sl = ids == SURF["Sleeve"][0]
+    seam, sgroove, stitch, band = sleeve_fields(sleeve[0], sleeve[1])
+    fold = sleeve[2][..., 0]
+    sb = base * (1 - 0.40 * sgroove[..., None]) * (1 - 0.12 * band[..., None]) * (1 + 0.30 * fold[..., None])
+    sb = sb * (1 - 0.6 * stitch[..., None]) + (sb * 1.9 + 0.004) * (0.6 * stitch[..., None])
+    sr = rough - 0.08 * band - 0.10 * stitch + 0.03 * fold
+    base[sl] = sb[sl]
+    rough[sl] = sr[sl]
     n_big = tb.fbm(p01, 5.0, 4, seed=11)
     n_mid = tb.fbm(p01, 30.0, 4, seed=12)
     n_fine = tb.fbm(p01, 160.0, 3, seed=13)
@@ -651,13 +870,95 @@ def materials():
         bump.inputs["Distance"].default_value = 0.0001
         nt.links.new(noise.outputs["Fac"], bump.inputs["Height"])
         nt.links.new(bump.outputs["Normal"], nt.nodes["Principled BSDF"].inputs["Normal"])
+    sleeve_seams(m["Sleeve"])
     return m
 
 
-def bake_textures(objs, out, size):
+def sleeve_seams(mat):
+    """Seams, topstitching and the hem band as bump on the sleeve material, so the normal bake
+    carries them; sleeve_fields() paints the same features into the colour map."""
+    nt = mat.node_tree
+    N, L = nt.nodes, nt.links
+
+    def op(kind, a, b=None):
+        n = N.new("ShaderNodeMath")
+        n.operation = kind
+        for i, v in enumerate((a, b)):
+            if isinstance(v, (int, float)):
+                n.inputs[i].default_value = v
+            elif v is not None:
+                L.new(v, n.inputs[i])
+        return n.outputs[0]
+
+    def ramp(x, lo, hi):
+        """smoothstep from lo to hi (falls when lo > hi)"""
+        n = N.new("ShaderNodeMapRange")
+        n.interpolation_type = "SMOOTHSTEP"
+        L.new(x, n.inputs["Value"])
+        n.inputs["From Min"].default_value = lo
+        n.inputs["From Max"].default_value = hi
+        return n.outputs["Result"]
+
+    def line(x, at, half=0.0007):
+        return ramp(op("ABSOLUTE", op("SUBTRACT", x, at)), half, 0.0)
+
+    def dashes(x):
+        return op("GREATER_THAN", op("FRACT", op("DIVIDE", x, STITCH_PITCH)), 0.35)
+
+    def attr(name):
+        a = N.new("ShaderNodeAttribute")
+        a.attribute_name = name
+        sep = N.new("ShaderNodeSeparateColor")
+        L.new(a.outputs["Color"], sep.inputs["Color"])
+        return sep.outputs["Red"], sep.outputs["Green"], sep.outputs["Blue"]
+
+    c1, s1, arc = attr("sleeve")
+    c2, s2, r10 = attr("sleeve2")
+    r = op("DIVIDE", r10, 10.0)
+    around = op("MULTIPLY", op("ARCTAN2", s1, c1), r)          # arc round the arm from the front seam
+    d = op("MINIMUM", op("ABSOLUTE", around), op("MULTIPLY", op("ABSOLUTE", op("ARCTAN2", s2, c2)), r))
+    seam = ramp(d, SEAM_HALF, SEAM_HALF - 0.0015)
+    stitch = op("MULTIPLY", line(d, STITCH_OFF), dashes(arc))
+    band = ramp(arc, HEM_BAND + 0.002, HEM_BAND - 0.002)
+    hem = op("MULTIPLY", op("MAXIMUM", line(arc, 0.006), line(arc, HEM_BAND - 0.005)), dashes(around))
+    h = op("ADD", seam, op("MULTIPLY", band, 0.7))
+    h = op("SUBTRACT", h, op("MULTIPLY", op("MAXIMUM", stitch, hem), 0.9))
+    bsdf = N["Principled BSDF"]
+    crinkle = bsdf.inputs["Normal"].links[0].from_socket
+    bump = N.new("ShaderNodeBump")
+    bump.inputs["Strength"].default_value = 1.0
+    bump.inputs["Distance"].default_value = 0.0004
+    L.new(h, bump.inputs["Height"])
+    L.new(crinkle, bump.inputs["Normal"])
+    L.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+
+
+def sleeve_fields(a1, a2):
+    """The same seam features as sleeve_seams(), from the baked attributes: (seam band, groove
+    along its edges, stitches, hem band)."""
+    r = a2[..., 2] / 10
+    around = np.arctan2(a1[..., 1], a1[..., 0]) * r
+    arc = a1[..., 2]
+    d = np.minimum(np.abs(around), np.abs(np.arctan2(a2[..., 1], a2[..., 0])) * r)
+
+    def line(x, at, half=0.0007):
+        return tb.smoothstep(half, 0.0, np.abs(x - at))
+
+    def dashes(x):
+        return (np.mod(x / STITCH_PITCH, 1.0) > 0.35).astype(np.float32)
+
+    seam = tb.smoothstep(SEAM_HALF, SEAM_HALF - 0.0015, d)
+    groove = line(d, SEAM_HALF, 0.0012)
+    stitch = np.maximum(line(d, STITCH_OFF) * dashes(arc),
+                        np.maximum(line(arc, 0.006), line(arc, HEM_BAND - 0.005)) * dashes(around))
+    band = tb.smoothstep(HEM_BAND + 0.002, HEM_BAND - 0.002, arc)
+    return seam, groove, stitch, band
+
+
+def bake_textures(objs, out, size, density=None):
     t0 = time.time()
     tb.setup(samples=16)
-    info = tb.atlas_uvs(objs, resolution=size, padding=max(4, size // 256))
+    info = tb.atlas_uvs(objs, resolution=size, padding=max(4, size // 256), density=density)
     print(f"atlas: {info}", flush=True)
     corners = np.array([o.matrix_world @ Vector(v) for o in objs for v in o.bound_box])
     bmin, bmax = corners.min(0).astype(np.float32) - 0.001, corners.max(0).astype(np.float32) + 0.001
@@ -666,8 +967,9 @@ def bake_textures(objs, out, size):
     aoe = tb.upsample(tb.dilate(aoe, tb.upsample(cover.astype(np.float32), size // 2) > 0.5, 4), size)
     pos, nrm = tb.bake_position_normal(objs, size, bmin, bmax)
     fields = tb.bake_attribute(objs, size, "glove")
+    sleeve = [tb.bake_attribute(objs, size, n) for n in ("sleeve", "sleeve2", "sleeve3")]
     tnrm = tb.bake_tangent_normal(objs, size, samples=6)
-    base, orm, tn = composite(ids, cover, aoe, pos, nrm, tnrm, bmin, bmax, fields)
+    base, orm, tn = composite(ids, cover, aoe, pos, nrm, tnrm, bmin, bmax, fields, sleeve)
     paths = {k: os.path.join(out, f"arms_{k}.jpg") for k in ("basecolor", "orm", "normal")}
     tb.save(base, paths["basecolor"], 90)
     tb.save(orm, paths["orm"], 92)
@@ -676,15 +978,12 @@ def bake_textures(objs, out, size):
     return paths
 
 
-# Elbow ends of the sleeves in pistol space (x right, y along the bore, z up).
-ELBOW_R = (0.124, -0.291, -0.245)
-ELBOW_L = (-0.192, -0.229, -0.210)
-
 # Viewmodel offsets from src/game/weapon.ts: pistol origin position in camera space and
 # Euler rotation (x, y, z; order YXZ), both in three.js axes.
 VIEWMODEL = {
     "hip": ((0.075, -0.15, -0.37), (0.02, 0.14, -0.1)),
-    "ads": ((0.0, -0.0488, -0.40), (0.0, 0.0, 0.0)),
+    "ads": (REST_VIEW, (0.0, 0.0, 0.0)),
+    "ads_zoom": (REST_VIEW, (0.0, 0.0, 0.0)),        # the same, 36 degree lens: the wrists up close
 }
 
 
@@ -714,6 +1013,10 @@ def debug_views(out_dir, root, names):
         "top": ((0.0, -0.04, 0.32), (0.0, -0.02, -0.03)),
         "back": ((0.05, -0.32, 0.10), (0.0, -0.02, -0.04)),
         "under": ((0.05, 0.10, -0.32), (0.0, 0.0, -0.04)),
+        # whole arms, rest (aim) pose
+        "arm_side": ((1.3, -0.30, 0.15), (0.0, -0.30, -0.02)),
+        "arm_top": ((0.05, -0.32, 1.4), (0.0, -0.32, 0.0)),
+        "arm_back": ((0.35, -1.3, 0.35), (0.0, -0.25, 0.0)),
     }
     for name in names:
         if name in VIEWMODEL:
@@ -724,7 +1027,7 @@ def debug_views(out_dir, root, names):
             to_three = Matrix(((1, 0, 0, 0), (0, 0, 1, 0), (0, -1, 0, 0), (0, 0, 0, 1)))
             cam.matrix_world = to_three.inverted() @ M.inverted()
             cam.data.sensor_fit = "VERTICAL"
-            cam.data.angle = math.radians(78)
+            cam.data.angle = math.radians(36 if name.endswith("_zoom") else 78)
             sc.render.resolution_x, sc.render.resolution_y = 960, 540
             root.rotation_euler = (0, 0, 0)
         else:
@@ -747,8 +1050,11 @@ def main():
                                    p.add_argument("--no-bake", action="store_true"),
                                    p.add_argument("--no-sleeves", action="store_true"),
                                    p.add_argument("--views", default=""),
-                                   p.add_argument("--elbows", default="", help="rx,ry,rz,lx,ly,lz (experiments)"),
-                                   p.add_argument("--vm", default="", help="name=px,py,pz,rx,ry,rz;... (experiments)")))
+                                   p.add_argument("--vm", default="", help="name=px,py,pz,rx,ry,rz;... (experiments)"),
+                                   p.add_argument("--lwrist", default="", help="x,y,z support wrist target (experiments)")))
+    global LEFT_WRIST
+    if args.lwrist:
+        LEFT_WRIST = tuple(float(x) for x in args.lwrist.split(","))
     c.reset_scene()
     t0 = time.time()
     pm = mp.materials()
@@ -768,28 +1074,49 @@ def main():
     pose_left(left, col2)
     l_obj = hand_object("hand_l", left, mats)
     glove(l_obj)
-    parts = [r_obj, l_obj]
     for nm, hnd in (("right", right), ("left", left)):
         ctr, axis, major, rx, ry = wrist_ring(hnd)
         print(f"  {nm} wrist ring centre {np.round(ctr, 4)} axis {np.round(axis, 3)} major {np.round(major, 3)} r {rx * 1000:.1f} x {ry * 1000:.1f} mm", flush=True)
-    if not args.no_sleeves:
-        er, el = ELBOW_R, ELBOW_L
-        if args.elbows:
-            v = [float(x) for x in args.elbows.split(",")]
-            er, el = tuple(v[:3]), tuple(v[3:])
-        sr, _ = sleeve_for(right, er, mats, 1)
-        sl, _ = sleeve_for(left, el, mats, 2)
-        parts += sr + sl
-    arms = hs.merge("Arms", parts)
-    print(f"arms built in {time.time() - t0:.1f}s, {sum(len(p.vertices) - 2 for p in arms.data.polygons)} tris", flush=True)
+    hand_parts, sleeves, joints = [], [], {}
+    for sfx, hnd, obj, seed in (("R", right, r_obj, 1), ("L", left, l_obj, 2)):
+        S, E, W = arm_joints(hnd)
+        along = cuff_frame(hnd, E, W)
+        cuff, cuff_r = glove_cuff(hnd, along, mats)
+        for o in [obj] + cuff:
+            add_weights(o, sfx)
+        hand_parts += [obj] + cuff
+        _, P = hnd.globals()
+        joints[sfx] = (S, E, W, unit(P["middle-finger-phalanx-proximal"] - P["wrist"]))
+        print(f"  {sfx} arm: shoulder {np.round(S, 3)} elbow {np.round(E, 3)} wrist {np.round(W, 3)}, "
+              f"elbow bend {math.degrees(math.pi - math.acos(float(unit(S - E) @ unit(W - E)))):.0f} deg", flush=True)
+        if not args.no_sleeves:
+            sl, wts = sleeve_mesh(hnd, along, S, E, W, cuff_r, mats, seed)
+            add_weights(sl, sfx, wts)
+            sleeves.append(sl)
+    hands = hs.merge("ArmsHands", hand_parts)
+    objs = [hands] + ([hs.merge("ArmsSleeves", sleeves)] if sleeves else [])
+    print(f"arms built in {time.time() - t0:.1f}s, {sum(len(p.vertices) - 2 for o in objs for p in o.data.polygons)} tris", flush=True)
 
     if not args.no_bake:
-        paths = bake_textures([arms], args.out, args.size)
+        # The sleeves are big but mostly seen at the edge of frame: fewer texels than the gloves.
+        paths = bake_textures(objs, args.out, args.size, density={"ArmsSleeves": 0.55})
         pbr = tb.pbr_material("ArmsPBR", paths["basecolor"], paths["orm"], paths["normal"])
-        arms.data.materials.clear()
-        arms.data.materials.append(pbr)
-        for p in arms.data.polygons:
-            p.material_index = 0
+        # Cloth sheen (KHR_materials_sheen): the soft bright rim fabric gets at grazing angles.
+        bsdf = pbr.node_tree.nodes["Principled BSDF"]
+        bsdf.inputs["Sheen Weight"].default_value = 1.0
+        # Kept faint: three.js adds it on top of the (dark) base, and more washes the fabric out.
+        bsdf.inputs["Sheen Tint"].default_value = (0.05, 0.05, 0.055, 1.0)
+        bsdf.inputs["Sheen Roughness"].default_value = 0.5
+        for o in objs:
+            o.data.materials.clear()
+            o.data.materials.append(pbr)
+            for p in o.data.polygons:
+                p.material_index = 0
+    arms = hs.merge("Arms", objs)
+    rig = build_rig(joints)
+    arms.parent = rig
+    mod = arms.modifiers.new("Rig", "ARMATURE")
+    mod.object = rig
 
     for item in filter(None, args.vm.split(";")):
         name, vals = item.split("=")
@@ -799,7 +1126,7 @@ def main():
         os.makedirs(args.preview, exist_ok=True)
         root = c.empty("Pistol", (0, 0, 0))
         light, lens = mp.build_light(pm)
-        for o in (frame, slide, light, lens, arms):
+        for o in (frame, slide, light, lens, rig):
             o.parent = root
         if args.views:
             debug_views(args.preview, root, args.views.split(","))
@@ -810,7 +1137,8 @@ def main():
     for o in list(bpy.data.objects):
         if o.name.startswith(("WeaponLight", "LightLens", "Pistol")):
             bpy.data.objects.remove(o, do_unlink=True)
-    c.export_glb(os.path.join(args.out, "arms.glb"), [arms])
+    # The colour attributes only feed the bake.
+    c.export_glb(os.path.join(args.out, "arms.glb"), [arms, rig], export_vertex_color="NONE")
 
 
 if __name__ == "__main__":
