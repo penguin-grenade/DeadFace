@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { GROUP_DEBRIS, type Physics } from '../engine/physics';
-import { assetManifest, modelUrl } from '../engine/assets';
+import { GROUP_DEBRIS, type HitInfo, type Physics } from '../engine/physics';
+import { assetManifest, loadGLTF, reportAssetProblem } from '../engine/assets';
 import type { Audio } from '../engine/audio';
 import type { Input } from '../engine/input';
 import type { Player } from './player';
+import { ArmRig } from './arms';
 import type { Effects } from './effects';
 import { flashSprite } from './textures';
 
@@ -28,7 +28,6 @@ function buildProceduralPistol() {
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = g) => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
-    m.castShadow = true;
     m.receiveShadow = true;
     parent.add(m);
     return m;
@@ -79,7 +78,6 @@ function buildArms() {
   const sleeve = new THREE.MeshStandardMaterial({ color: 0x1f2630, roughness: 0.95 });
   const mk = (geo: THREE.BufferGeometry, mat: THREE.Material) => {
     const m = new THREE.Mesh(geo, mat);
-    m.castShadow = true;
     m.receiveShadow = true;
     g.add(m);
     return m;
@@ -113,12 +111,15 @@ export class Weapon {
   private flashLight: THREE.PointLight;
   readonly flashlight: THREE.SpotLight;
   private flashTime = 0;
+  private ray = new THREE.Raycaster();
+  private rig: ArmRig | null = null;
 
   ammo = MAG_SIZE;
   reserve = 45;
   private cooldown = 0;
   private reloadT = -1;
-  private aim = 0;
+  /** 0 at the hip, 1 aimed down the sights. */
+  aim = 0;
   private kickZ = 0;
   private kickVel = 0;
   private kickRot = 0;
@@ -162,16 +163,17 @@ export class Weapon {
     const load = async (name: string) => {
       if (!models.includes(name)) return null;
       try {
-        const gltf = await new GLTFLoader().loadAsync(await modelUrl(name));
+        const gltf = await loadGLTF(`models/${name}.glb`);
         gltf.scene.traverse((o) => {
           if ((o as THREE.Mesh).isMesh) {
-            o.castShadow = true;
+            // No full body to go with it, so the viewmodel casts no shadow (it also keeps the lamps' cached shadows static).
+            o.castShadow = false;
             o.receiveShadow = true;
           }
         });
         return gltf.scene;
       } catch (e) {
-        console.warn(`${name}.glb failed to load, using procedural fallback`, e);
+        reportAssetProblem(name, e);
         return null;
       }
     };
@@ -184,6 +186,7 @@ export class Weapon {
 
     this.view.add(this.model);
     this.view.add(arms ?? buildArms());
+    this.rig = arms ? ArmRig.from(arms) : null;
     this.muzzle.add(this.flash);
     this.muzzle.add(this.flashLight);
     this.flashLight.position.set(0, 0, -0.05);
@@ -227,13 +230,13 @@ export class Weapon {
     dir.z += (Math.random() - 0.5) * spread;
     dir.normalize();
 
-    const hit = this.physics.raycast(origin, dir, 120, this.player.collider);
+    const hit = this.trace(origin, dir);
     if (hit) {
       const surface = hit.tag?.surface ?? 'concrete';
       const body = hit.collider.parent();
       const movable = body && !body.isFixed();
       this.effects.impact(hit.point, hit.normal, surface, dir, movable ? hit.tag?.mesh : undefined);
-      this.audio.impact(surface === 'metal' ? 'metal' : surface === 'wood' || surface === 'cardboard' ? 'wood' : surface === 'flesh' ? 'flesh' : 'concrete', hit.distance);
+      this.audio.impact(surface === 'metal' ? 'metal' : surface === 'wood' || surface === 'cardboard' || surface === 'rubber' || surface === 'fibreglass' ? 'wood' : surface === 'flesh' || surface === 'fabric' ? 'flesh' : 'concrete', hit.distance);
       hit.tag?.onHit?.(hit, dir);
       if (body && body.isDynamic()) {
         body.applyImpulseAtPoint(dir.clone().multiplyScalar(2.2), hit.point, true);
@@ -255,6 +258,35 @@ export class Weapon {
     this.ejectCasing();
   }
 
+  /**
+   * The bullet's path. Targets' colliders only approximate their shape, so a hit on one
+   * ('precise' tag) is checked against the visible mesh: it moves onto the surface, or the
+   * bullet carries on past (between the legs, beside an arm).
+   */
+  private trace(origin: THREE.Vector3, dir: THREE.Vector3): HitInfo | null {
+    const passed = new Set<number>();
+    const filter = (c: RAPIER.Collider) => !passed.has(c.parent()?.handle ?? -1);
+    for (let i = 0; i < 4; i++) {
+      const hit = this.physics.raycast(origin, dir, 120, this.player.collider, passed.size ? filter : undefined);
+      if (!hit?.tag?.precise || !hit.tag.mesh) return hit;
+      this.ray.set(origin, dir);
+      this.ray.near = Math.max(0, hit.distance - 0.8);
+      this.ray.far = hit.distance + 0.8;
+      // Decals parented to the target are planes; only the target's own surface counts.
+      const vis = this.ray.intersectObject(hit.tag.mesh, true).find((v) => (v.object as THREE.Mesh).geometry?.type !== 'PlaneGeometry');
+      if (vis) {
+        hit.point.copy(vis.point);
+        hit.distance = vis.distance;
+        if (vis.face) hit.normal.copy(vis.face.normal).transformDirection(vis.object.matrixWorld);
+        return hit;
+      }
+      const body = hit.collider.parent();
+      if (!body) return hit;
+      passed.add(body.handle);
+    }
+    return null;
+  }
+
   private ejectCasing() {
     const R = this.physics.R;
     const p = this.eject.getWorldPosition(new THREE.Vector3());
@@ -271,7 +303,6 @@ export class Weapon {
     const col = this.physics.world.createCollider(R.ColliderDesc.cylinder(0.0095, 0.0048).setDensity(8000).setRestitution(0.4).setFriction(0.6), body);
     col.setCollisionGroups(GROUP_DEBRIS);
     const mesh = new THREE.Mesh(this.casingGeo, this.brass);
-    mesh.castShadow = true;
     this.scene.add(mesh);
     this.physics.sync(body, mesh);
     this.casings.push({ body, mesh, age: 0, clinked: false });
@@ -331,8 +362,10 @@ export class Weapon {
     this.lagYaw += (THREE.MathUtils.clamp(-av.x * 0.012, -0.08, 0.08) - this.lagYaw) * Math.min(1, 10 * dt);
     this.lagPitch += (THREE.MathUtils.clamp(-av.y * 0.012, -0.08, 0.08) - this.lagPitch) * Math.min(1, 10 * dt);
 
-    const hip = new THREE.Vector3(0.045, -0.125, -0.33);
-    const ads = new THREE.Vector3(0, -0.147, -0.34);
+    // Hip: compressed low ready, right of centre. ADS: sight line on the camera axis (front post
+    // top is 48.8 mm above the pistol origin), arms extended so both forearms rise from the frame edge.
+    const hip = new THREE.Vector3(0.075, -0.15, -0.37);
+    const ads = new THREE.Vector3(0, -0.0488, -0.5);
     const pos = hip.lerp(ads, this.aim);
     const bob = this.player.bob;
     const sprint = this.player.sprinting ? 1 : 0;
@@ -343,11 +376,12 @@ export class Weapon {
     // Hip pose is slightly canted so the side of the slide and both hands read on camera.
     const hipCant = 1 - this.aim;
     this.view.rotation.set(
-      this.kickRot * 0.04 + this.wallBlock * 0.9 + reloadPose * -0.5 - sprint * 0.35 + Math.sin(time * 1.6) * 0.004 + hipCant * 0.03,
-      this.lagYaw + sprint * 0.5 + reloadPose * 0.4 + hipCant * 0.1,
+      this.kickRot * 0.04 + this.wallBlock * 0.9 + reloadPose * -0.5 - sprint * 0.35 + Math.sin(time * 1.6) * 0.004 + hipCant * 0.02,
+      this.lagYaw + sprint * 0.5 + reloadPose * 0.4 + hipCant * 0.14,
       reloadPose * 0.6 + sprint * 0.2 - hipCant * 0.1,
       'YXZ',
     );
+    this.rig?.update(this.player.camera);
 
     if (this.slide) {
       this.slideT = Math.min(1, this.slideT + dt / 0.07);

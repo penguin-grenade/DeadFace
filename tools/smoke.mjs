@@ -53,8 +53,15 @@ await page2.goto(url.replace('?demo', ''), { timeout: 120_000 });
 await page2.waitForFunction(() => window.__game, null, { timeout: 120_000 });
 const combat = await page2.evaluate(async () => {
   const g = window.__game;
-  const m = g.targets.mannequins[0];
   const V = g.camera.position.constructor;
+  // Nearest mannequin with a clear line of fire from the spawn (props may hide some).
+  const eye = g.camera.getWorldPosition(new V());
+  const chest = (m) => {
+    const t = m.body.translation();
+    return new V(t.x, t.y + 1.25, t.z);
+  };
+  const clear = (m) => g.physics.raycast(eye, chest(m).sub(eye).normalize(), 120, g.player.collider)?.tag?.mesh === m.group;
+  const m = g.targets.mannequins.filter(clear).sort((a, b) => chest(a).distanceTo(eye) - chest(b).distanceTo(eye))[0] ?? g.targets.mannequins[0];
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // Software GL renders slowly, so re-aim before every shot (recoil climbs)
   // and wait for the smoothed camera to settle on the target.
@@ -77,7 +84,7 @@ const combat = await page2.evaluate(async () => {
     g.weapon.fire();
     shots++;
   }
-  return { down: m.down, shots, ammo: g.weapon.ammo };
+  return { down: m.down, shots, ammo: g.weapon.ammo, target: g.targets.mannequins.indexOf(m), health: m.health };
 });
 await page2.waitForTimeout(1500);
 await page2.evaluate(() => (document.getElementById('start').hidden = true));

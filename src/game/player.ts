@@ -106,14 +106,17 @@ export class Player {
 
   fixedUpdate(dt: number, aiming: boolean) {
     const i = this.input;
-    const crouch = i.key('KeyC') || i.key('ControlLeft');
-    this.sprinting = i.key('ShiftLeft') && !aiming && !crouch && i.key('KeyW');
+    const crouch = i.key('KeyC') || i.key('ControlLeft') || i.crouch;
+    this.sprinting = ((i.key('ShiftLeft') && i.key('KeyW')) || i.sprint) && !aiming && !crouch;
     const speed = crouch ? 1.3 : this.sprinting ? 4.8 : aiming ? 1.8 : 2.6;
 
-    const f = (i.key('KeyW') ? 1 : 0) - (i.key('KeyS') ? 1 : 0);
-    const s = (i.key('KeyD') ? 1 : 0) - (i.key('KeyA') ? 1 : 0);
+    // Keys, or the touch stick, which is analog: a small push walks slowly.
+    const stick = i.moveX !== 0 || i.moveY !== 0;
+    const f = stick ? i.moveY : (i.key('KeyW') ? 1 : 0) - (i.key('KeyS') ? 1 : 0);
+    const s = stick ? i.moveX : (i.key('KeyD') ? 1 : 0) - (i.key('KeyA') ? 1 : 0);
     const wish = new THREE.Vector3(s, 0, -f);
-    if (wish.lengthSq() > 0) wish.normalize().multiplyScalar(speed);
+    if (wish.lengthSq() > 1) wish.normalize();
+    wish.multiplyScalar(speed);
     wish.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
 
     // Heavy-ish acceleration: gear and body armour.

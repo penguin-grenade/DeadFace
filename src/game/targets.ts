@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
-import type { HitInfo, Physics } from '../engine/physics';
+import { GROUP_PROP, GROUP_TARGET, type HitInfo, type Physics, type SurfaceKind } from '../engine/physics';
 import type { Materials } from './level';
 
 /** Optional authored assets from the Blender pipeline, keyed by file stem. */
@@ -88,12 +88,30 @@ export class Targets {
 
     const m: Mannequin = { body, group, home: at.clone(), health: 3, down: false, downTime: 0, facing, track, phase: Math.random() * 6 };
     const onHit = (hit: HitInfo, dir: THREE.Vector3) => this.hitMannequin(m, hit, dir);
-    const legs = w.createCollider(R.ColliderDesc.cuboid(0.2, 0.45, 0.12).setTranslation(0, 0.45, 0).setDensity(300), body);
-    const torso = w.createCollider(R.ColliderDesc.cuboid(0.26, 0.35, 0.15).setTranslation(0, 1.22, 0).setDensity(300), body);
-    const head = w.createCollider(R.ColliderDesc.ball(0.12).setTranslation(0, 1.7, 0).setDensity(300), body);
-    this.physics.tag(legs, { surface: 'flesh', mesh: group, onHit, part: 'legs' });
-    this.physics.tag(torso, { surface: 'flesh', mesh: group, onHit, part: 'torso' });
-    this.physics.tag(head, { surface: 'flesh', mesh: group, onHit, part: 'head' });
+    // One collider per body part (the figure faces +z, its stand plate under the feet), so shots
+    // between the legs or past an arm carry on; bullets then confirm hits against the mesh.
+    const tilt = (a: number) => new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), a);
+    const parts: [RAPIER.ColliderDesc, SurfaceKind, string | null][] = [
+      [R.ColliderDesc.ball(0.108).setTranslation(0, 1.747, 0.005), 'fibreglass', 'head'],
+      [R.ColliderDesc.capsule(0.02, 0.055).setTranslation(0, 1.587, -0.016), 'fibreglass', 'torso'],
+      [R.ColliderDesc.cuboid(0.175, 0.225, 0.1825).setTranslation(0, 1.295, 0.0075), 'fabric', 'torso'],
+      [R.ColliderDesc.cuboid(0.175, 0.1, 0.13).setTranslation(0, 0.98, -0.02), 'fabric', 'torso'],
+      [R.ColliderDesc.cuboid(0.24, 0.006, 0.21).setTranslation(0, 0.006, 0.045), 'metal', null],
+    ];
+    for (const s of [-1, 1]) {
+      parts.push(
+        [R.ColliderDesc.capsule(0.2325, 0.05).setTranslation(s * 0.229, 1.183, 0.006).setRotation(tilt(s * 0.1456)), 'fibreglass', 'arm'],
+        [R.ColliderDesc.capsule(0.045, 0.045).setTranslation(s * 0.278, 0.817, 0.042), 'fibreglass', 'arm'],
+        [R.ColliderDesc.capsule(0.14, 0.085).setTranslation(s * 0.098, 0.727, 0.0), 'fabric', 'legs'],
+        [R.ColliderDesc.capsule(0.145, 0.065).setTranslation(s * 0.107, 0.307, 0.006), 'fabric', 'legs'],
+        [R.ColliderDesc.cuboid(0.05, 0.04, 0.135).setTranslation(s * 0.13, 0.052, 0.056), 'fibreglass', 'legs'],
+      );
+    }
+    for (const [desc, surface, part] of parts) {
+      const col = w.createCollider(desc.setDensity(300).setCollisionGroups(GROUP_TARGET), body);
+      // The stand rings like steel but a shot to it doesn't count against the target.
+      this.physics.tag(col, part ? { surface, mesh: group, onHit, part, precise: true } : { surface, mesh: group, precise: true });
+    }
     this.physics.sync(body, group);
     this.mannequins.push(m);
   }
@@ -153,7 +171,7 @@ export class Targets {
     }
 
     const body = w.createRigidBody(R.RigidBodyDesc.kinematicPositionBased().setTranslation(at.x, at.y + 1.05, at.z));
-    const col = w.createCollider(R.ColliderDesc.cylinder(0.006, 0.22), body);
+    const col = w.createCollider(R.ColliderDesc.cylinder(0.006, 0.22).setCollisionGroups(GROUP_TARGET), body);
     const p: Plate = { pivot, body, angle: 0, vel: 0, hinge: pivot.position.clone() };
     this.physics.tag(col, {
       surface: 'metal',
@@ -174,7 +192,7 @@ export class Targets {
     mesh.castShadow = true;
     this.scene.add(mesh);
     const body = this.physics.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(at.x, at.y + 0.061, at.z).setCcdEnabled(true));
-    const col = this.physics.world.createCollider(R.ColliderDesc.cylinder(0.061, 0.033).setDensity(400).setRestitution(0.3), body);
+    const col = this.physics.world.createCollider(R.ColliderDesc.cylinder(0.061, 0.033).setDensity(400).setRestitution(0.3).setCollisionGroups(GROUP_PROP), body);
     this.physics.tag(col, { surface: 'metal', mesh });
     this.physics.sync(body, mesh);
     this.props.push({ body, mesh, home: at.clone().setY(at.y + 0.061) });
@@ -186,10 +204,19 @@ export class Targets {
     mesh.castShadow = mesh.receiveShadow = true;
     this.scene.add(mesh);
     const body = this.physics.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(at.x, at.y + size * 0.4, at.z).setRotation(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.random(), 0))));
-    const col = this.physics.world.createCollider(R.ColliderDesc.cuboid(size / 2, size * 0.4, size / 2).setDensity(120), body);
+    const col = this.physics.world.createCollider(R.ColliderDesc.cuboid(size / 2, size * 0.4, size / 2).setDensity(120).setCollisionGroups(GROUP_PROP), body);
     this.physics.tag(col, { surface: 'cardboard', mesh });
     this.physics.sync(body, mesh);
     this.props.push({ body, mesh, home: at.clone().setY(at.y + size * 0.4) });
+  }
+
+  /** Everything that moves, with a rough radius (for shadow/ambient tracking). */
+  movingObjects(): { object: THREE.Object3D; radius: number }[] {
+    return [
+      ...this.mannequins.map((m) => ({ object: m.group as THREE.Object3D, radius: 1.2 })),
+      ...this.plates.map((p) => ({ object: p.pivot, radius: 0.5 })),
+      ...this.props.map((p) => ({ object: p.mesh, radius: 0.3 })),
+    ];
   }
 
   resetProps() {

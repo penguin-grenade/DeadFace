@@ -9,9 +9,11 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "smoke": "node tools/smoke.mjs",
+    "smoke:touch": "node tools/touch-smoke.mjs",
     "package:artifact": "npm run build && node tools/artifact.mjs",
     "assets": "blender -b -P blender/build_all.py --",
-    "assets:bpy": "python3 blender/build_all.py"
+    "assets:bpy": "python3 blender/build_all.py",
+    "level:bpy": "python3 blender/build_level.py && npx --yes @gltf-transform/cli@4.5.1 meshopt public/level/level.glb public/level/level.glb"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",
