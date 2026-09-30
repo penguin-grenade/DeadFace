@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "smoke": "node tools/smoke.mjs",
+    "smoke:touch": "node tools/touch-smoke.mjs",
     "package:artifact": "npm run build && node tools/artifact.mjs",
     "assets": "blender -b -P blender/build_all.py --",
     "assets:bpy": "python3 blender/build_all.py",

@@ -1,4 +1,7 @@
-/** Keyboard + pointer-lock mouse state. Edge-triggered presses are cleared each frame by endFrame(). */
+/**
+ * Keyboard + pointer-lock mouse state, plus what the on-screen touch controls (touch.ts) feed in.
+ * Edge-triggered presses are cleared each frame by endFrame().
+ */
 export class Input {
   private down = new Set<string>();
   private pressed = new Set<string>();
@@ -10,6 +13,13 @@ export class Input {
   locked = false;
   /** Set when pointer lock is unavailable (e.g. sandboxed iframe): raw mouse deltas are used instead. */
   freeLook = false;
+  /** Playing with the touch controls: no pointer lock, and the mouse handlers stand down. */
+  touch = false;
+  /** Touch stick: x right, y forward, within the unit circle (0 when unused). */
+  moveX = 0;
+  moveY = 0;
+  sprint = false;
+  crouch = false;
 
   constructor(private el: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -22,14 +32,16 @@ export class Input {
       this.down.clear();
       this.fire = false;
       this.aim = false;
+      this.moveX = this.moveY = 0;
+      this.sprint = false;
     });
     document.addEventListener('mousemove', (e) => {
-      if (!this.active) return;
+      if (!this.active || this.touch) return;
       this.mouseDX += e.movementX;
       this.mouseDY += e.movementY;
     });
     el.addEventListener('mousedown', (e) => {
-      if (!this.active) return;
+      if (!this.active || this.touch) return;
       if (e.button === 0) {
         this.fire = true;
         this.firePressed = true;
@@ -37,6 +49,7 @@ export class Input {
       if (e.button === 2) this.aim = true;
     });
     window.addEventListener('mouseup', (e) => {
+      if (this.touch) return;
       if (e.button === 0) this.fire = false;
       if (e.button === 2) this.aim = false;
     });
@@ -52,7 +65,18 @@ export class Input {
   }
 
   get active() {
-    return this.locked || this.freeLook;
+    return this.locked || this.freeLook || this.touch;
+  }
+
+  /** A key press from an on-screen button: keyPressed() sees it for one frame. */
+  press(code: string) {
+    this.pressed.add(code);
+  }
+
+  /** Look, in mouse pixels (a touch drag). */
+  look(dx: number, dy: number) {
+    this.mouseDX += dx;
+    this.mouseDY += dy;
   }
 
   requestLock() {

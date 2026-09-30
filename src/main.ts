@@ -3,6 +3,7 @@ import { Renderer, type Quality } from './engine/renderer';
 import { assetManifest, assetProblems, loadGLTF, policyBlocks, reportAssetProblem } from './engine/assets';
 import { Physics } from './engine/physics';
 import { Input } from './engine/input';
+import { TouchControls } from './engine/touch';
 import { Audio } from './engine/audio';
 import { buildLevel, makeMaterials, type Level } from './game/level';
 import { loadBakedLevel } from './game/bakedLevel';
@@ -15,6 +16,10 @@ import { Targets, type ModelLibrary } from './game/targets';
 const params = new URLSearchParams(location.search);
 /** ?demo runs without pointer lock: slow look-around + periodic fire, used by the smoke test. */
 const DEMO = params.has('demo');
+/** ?touch shows the touch controls on a desktop too (they then answer the mouse). */
+const FORCE_TOUCH = params.has('touch');
+/** Phones and tablets: the start screen explains the touch controls instead of the keys. */
+const TOUCH_FIRST = FORCE_TOUCH || matchMedia('(pointer: coarse)').matches;
 
 async function loadModels(): Promise<ModelLibrary> {
   const lib: ModelLibrary = {};
@@ -103,6 +108,7 @@ async function main() {
   for (let i = 0; i < 30; i++) physics.world.step();
 
   loadingEl.hidden = true;
+  ctaEl.textContent = TOUCH_FIRST ? 'Tap to start' : 'Click to start';
   ctaEl.hidden = false;
   if (assetProblems.length) {
     const blocked = policyBlocks.size ? ` The host blocked: ${[...policyBlocks].join(', ')}.` : '';
@@ -110,15 +116,40 @@ async function main() {
     noteEl.hidden = false;
   }
   if (DEMO) startEl.hidden = true;
-  const start = () => {
-    audio.init();
-    input.requestLock();
-    startEl.hidden = true;
+
+  // Touch play: on-screen controls instead of pointer lock, chosen by how the game was started, so
+  // a touchscreen laptop works either way.
+  let touch: TouchControls | null = null;
+  let startedBy = 'mouse';
+  let pausedAt = -1e9;
+  const pause = () => {
+    input.touch = false;
+    touch?.show(false);
+    startEl.hidden = false;
+    pausedAt = performance.now();
   };
+  const start = () => {
+    // The tap on the pause button must not also resume.
+    if (performance.now() - pausedAt < 400) return;
+    audio.init();
+    startEl.hidden = true;
+    if (startedBy === 'touch' || startedBy === 'pen' || FORCE_TOUCH) {
+      document.body.classList.add('touch-ui');
+      touch ??= new TouchControls(document.body, input, { onPause: pause, allowMouse: FORCE_TOUCH });
+      input.touch = true;
+      touch.show(true);
+      fullscreen();
+    } else {
+      input.touch = false;
+      input.requestLock();
+    }
+  };
+  startEl.addEventListener('pointerdown', (e) => (startedBy = e.pointerType));
   startEl.addEventListener('click', start);
   startEl.addEventListener('keydown', (e) => {
     if (e.code === 'Enter' || e.code === 'Space') {
       e.preventDefault();
+      startedBy = 'keyboard';
       start();
     }
   });
@@ -133,10 +164,30 @@ async function main() {
     }
   });
 
+  let quality: Quality = 'high';
   const setQuality = (q: Quality) => {
+    quality = q;
     renderer.setQuality(q);
     hint(`Quality: ${q}`);
+    showOptions();
   };
+
+  // Touch-friendly versions of the 1/2/3, H and T keys on the start screen.
+  const optsEl = document.getElementById('opts')!;
+  const showOptions = () => {
+    for (const b of optsEl.querySelectorAll<HTMLElement>('[data-q]')) b.classList.toggle('on', b.dataset.q === quality);
+    optsEl.querySelector('[data-opt="hud"]')?.classList.toggle('on', !hud.classList.contains('minimal'));
+  };
+  optsEl.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const b = (e.target as HTMLElement).closest<HTMLElement>('button');
+    if (!b) return;
+    if (b.dataset.q) setQuality(b.dataset.q as Quality);
+    else if (b.dataset.opt === 'hud') hud.classList.toggle('minimal');
+    else if (b.dataset.opt === 'reset') targets.resetProps();
+    showOptions();
+  });
+  optsEl.addEventListener('pointerdown', (e) => e.stopPropagation());
 
   let last = performance.now();
   let time = 0;
@@ -161,7 +212,10 @@ async function main() {
     if (input.keyPressed('Digit1')) setQuality('low');
     if (input.keyPressed('Digit2')) setQuality('medium');
     if (input.keyPressed('Digit3')) setQuality('high');
-    if (input.keyPressed('KeyH')) hud.classList.toggle('minimal');
+    if (input.keyPressed('KeyH')) {
+      hud.classList.toggle('minimal');
+      showOptions();
+    }
     if (input.keyPressed('KeyT')) targets.resetProps();
 
     physics.update(dt, (step) => player.fixedUpdate(step, weapon.aiming));
@@ -183,6 +237,13 @@ async function main() {
     u.uFlash.value = weapon.flashAmount;
 
     renderer.render(time, dt);
+    touch?.update({
+      ammo: weapon.ammo,
+      reserve: weapon.reserve,
+      reloading: weapon.reloading,
+      aim: weapon.aim,
+      light: weapon.flashlight.visible,
+    });
     input.endFrame();
 
     // HUD
@@ -196,6 +257,8 @@ async function main() {
     requestAnimationFrame(frame);
   };
   hud.classList.add('minimal');
+  if (TOUCH_FIRST) document.body.classList.add('touch-ui');
+  showOptions();
 
   // Debug views: ?clean drops the bodycam look, volumetrics and viewmodel and matches the Blender
   // preview camera (16 mm on 36 mm film, 16:9); ?exp= fixes the exposure (Blender's +1 EV is exp=2);
@@ -218,6 +281,15 @@ async function main() {
 
   // Debug handle for the smoke test / console tinkering.
   (window as unknown as Record<string, unknown>).__game = { scene, camera, player, weapon, physics, renderer, targets, level };
+}
+
+/** Best effort: phones get the whole screen, turned sideways. Hosts that don't allow it just say no. */
+function fullscreen() {
+  const el = document.documentElement;
+  if (!document.fullscreenEnabled || document.fullscreenElement || !el.requestFullscreen) return;
+  el.requestFullscreen({ navigationUI: 'hide' })
+    .then(() => (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock?.('landscape'))
+    .catch(() => {});
 }
 
 main().catch((e) => {

@@ -18,6 +18,7 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none; /* no pull-to-refresh mid-game */
   background: var(--feed);
   color: var(--osd);
   font-family: var(--font-osd);
@@ -26,8 +27,9 @@ body {
 #view {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
+  /* 100%, not 100vh: on phones vh includes the space under the browser bars */
+  width: 100%;
+  height: 100%;
   display: block;
 }
 
@@ -115,9 +117,10 @@ body {
   position: fixed;
   inset: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding-inline: 16px;
+  /* a short landscape phone scrolls the panel rather than clipping it; no double-tap zoom */
+  overflow-y: auto;
+  touch-action: manipulation;
   background: var(--scrim);
   cursor: pointer;
 }
@@ -132,6 +135,8 @@ body {
 }
 
 .panel {
+  /* centred while it fits, top-aligned (and scrollable) once it doesn't */
+  margin: auto;
   text-align: center;
   padding-block: 16px;
   max-width: 34rem;
@@ -186,16 +191,246 @@ body {
   color: var(--key);
 }
 
-.touch-note {
+/* ---------- touch play: start screen ---------- */
+.touch-help,
+.opts,
+.rotate-note {
   display: none;
-  font-size: 14px;
+}
+
+.touch-ui .keys {
+  display: none;
+}
+
+.touch-ui .touch-help {
+  display: table;
+}
+
+.touch-ui .opts {
+  display: flex;
+}
+
+.touch-ui .ammo {
+  display: none; /* the reload button shows the rounds */
+}
+
+@media (orientation: portrait) {
+  .touch-ui .rotate-note {
+    display: block;
+    font-size: 14px;
+    color: var(--key);
+  }
+}
+
+.opts {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 1.4em;
+}
+
+.opts .seg {
+  display: flex;
+}
+
+.opts button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(242, 239, 230, 0.4);
+  border-radius: 0;
+  background: transparent;
+  color: var(--osd);
+  font: 13px var(--font-osd);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.opts .seg button + button {
+  border-left: none;
+}
+
+.opts button.on {
+  color: var(--key);
+  border-color: var(--key);
+}
+
+.opts .seg button.on + button {
+  border-left: 1px solid rgba(242, 239, 230, 0.4);
+}
+
+.opts .seg button + button.on {
+  border-left: 1px solid var(--key);
+}
+
+.opts button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* short landscape phones: keep the whole panel on screen */
+@media (max-height: 360px) {
+  .panel h1 {
+    font-size: 40px;
+  }
+  .panel .unit {
+    margin: 0.4em 0 1em;
+  }
+  .panel table,
+  .opts {
+    margin-top: 0.9em;
+  }
+}
+
+/* ---------- touch play: on-screen controls (src/engine/touch.ts) ---------- */
+.touch-ui {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.touch {
+  /* layout unit: 1vmin, capped so tablets get thumb-sized controls (UNIT_MAX in touch.ts) */
+  --u: min(1vmin, 4.6px);
+  --line: rgba(242, 239, 230, 0.55);
+  --fill: rgba(6, 7, 8, 0.26);
+  --press: rgba(242, 239, 230, 0.26);
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  color: var(--osd);
+  font-family: var(--font-osd);
+  text-shadow: 0 0 2px var(--osd-shadow), 0 0 4px var(--osd-shadow);
+}
+
+.touch[hidden] {
+  display: none;
+}
+
+.tbtn {
+  position: absolute;
+  right: calc((var(--x) - var(--s) / 2) * var(--u) + env(safe-area-inset-right, 0px));
+  bottom: calc((var(--y) - var(--s) / 2) * var(--u) + env(safe-area-inset-bottom, 0px));
+  width: calc(var(--s) * var(--u));
+  height: calc(var(--s) * var(--u));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(0.6 * var(--u));
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  background: var(--fill);
+  font-size: max(9px, calc(2.1 * var(--u)));
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  transition:
+    transform 60ms ease-out,
+    background-color 60ms;
+}
+
+.tbtn.l {
+  right: auto;
+  left: calc((var(--x) - var(--s) / 2) * var(--u) + env(safe-area-inset-left, 0px));
+}
+
+.tbtn.t {
+  right: auto;
+  bottom: auto;
+  left: calc((var(--x) - var(--s) / 2) * var(--u) + env(safe-area-inset-left, 0px));
+  top: calc((var(--y) - var(--s) / 2) * var(--u) + env(safe-area-inset-top, 0px));
+}
+
+.tbtn svg {
+  width: 40%;
+  height: 40%;
+  filter: drop-shadow(0 0 1.5px var(--osd-shadow));
+}
+
+.tbtn.fire {
+  border-width: 2px;
+}
+
+.tbtn.fire svg {
+  width: 34%;
+  height: 34%;
+}
+
+.tbtn.pause svg {
+  width: 48%;
+  height: 48%;
+}
+
+.tbtn.down {
+  background: var(--press);
+  transform: scale(0.93);
+}
+
+.tbtn.on {
+  border-color: var(--key);
   color: var(--key);
 }
 
-@media (hover: none) and (pointer: coarse) {
-  .touch-note {
-    display: block;
-  }
+.stick {
+  --r: calc(13 * var(--u)); /* STICK_R in touch.ts */
+  position: absolute;
+  width: calc(var(--r) * 2);
+  height: calc(var(--r) * 2);
+  margin: calc(var(--r) * -1) 0 0 calc(var(--r) * -1);
+  box-sizing: border-box;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(6, 7, 8, 0.06) 45%, rgba(6, 7, 8, 0.3));
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 150ms;
+}
+
+.stick.parked {
+  left: calc(22 * var(--u) + env(safe-area-inset-left, 0px));
+  top: calc(100% - 24 * var(--u) - env(safe-area-inset-bottom, 0px));
+}
+
+.stick.active {
+  opacity: 0.95;
+  transition: none;
+}
+
+.stick .knob {
+  position: absolute;
+  left: 27%;
+  top: 27%;
+  width: 46%;
+  height: 46%;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(242, 239, 230, 0.75);
+  border-radius: 50%;
+  background: rgba(242, 239, 230, 0.2);
+}
+
+.stick .sprint {
+  /* above the knob's reach: push up to here to sprint */
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + var(--r) * 0.5);
+  transform: translateX(-50%);
+  font-size: max(9px, calc(2.1 * var(--u)));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.stick.sprinting {
+  border-color: var(--key);
+}
+
+.stick.sprinting .sprint {
+  opacity: 1;
+  color: var(--key);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -203,7 +438,9 @@ body {
   .panel .cta {
     animation: none;
   }
-  .hint {
+  .hint,
+  .tbtn,
+  .stick {
     transition: none;
   }
 }

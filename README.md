@@ -33,6 +33,14 @@ fire, right mouse raise/aim, R reload, F weapon light, H toggle ammo + dot,
 T reset props, 1/2/3 post-FX quality, Esc pause. `?oldlevel` loads the older
 procedural range instead of the baked warehouse.
 
+On phones and tablets, tap to start and the game switches to touch controls
+(`src/engine/touch.ts`): a floating stick under the left thumb (analog; push
+past its ring to sprint), drag anywhere on the right to look, and buttons for
+fire (drag it to keep aiming while shooting), aim, reload with the round count,
+jump, crouch and the weapon light, plus a second fire button above the stick and
+a pause button top left. The pause screen has the quality, dot and reset-props
+switches. `?touch` shows the touch controls on a desktop too, driven by the mouse.
+
 ## What makes it look real
 
 | | Where |
@@ -56,14 +64,14 @@ pendulum steel plates, a 15-round magazine with a timed reload.
 ```
 src/
   main.ts                 bootstrap + frame loop
-  engine/                 renderer, post FX, physics wrapper, input, audio, asset loading
+  engine/                 renderer, post FX, physics wrapper, input + touch controls, audio, asset loading
   game/                   baked level + shading, player, weapon, targets, effects, procedural fallbacks
 blender/                  asset pipeline (see docs/PIPELINE.md)
 public/models/*.glb       models exported by the pipeline (meshopt-compressed where large)
 public/level/             warehouse: level.glb, level.json, lightmap, mask, reflection probe
 public/textures/*.jpg     tiling PBR sets (albedo / normal / roughness)
 public/assets.json        manifest the game reads; anything missing falls back to procedural
-tools/                    smoke test, screenshot views, artifact packaging
+tools/                    smoke tests (desktop, touch), screenshot views, artifact packaging
 ```
 
 ## Assets
@@ -86,12 +94,16 @@ game relies on, and how to swap in scanned materials or hand-made models.
 ```bash
 npm run typecheck
 npm run smoke                              # headless Chromium; CHROMIUM=/path/to/chrome if needed
+npm run smoke:touch                        # touch controls on a phone-sized screen
 node tools/shots.mjs spawn dummy range     # named camera views -> screenshots/
 ```
 
 The smoke test renders the demo loop, then aims at the nearest mannequin and
 fires until it drops, and fails on any console error. `?demo` in the URL runs
-the automatic look-around + fire loop without pointer lock.
+the automatic look-around + fire loop without pointer lock. The touch test
+starts the game with a tap on an emulated 844 x 390 phone and drives it with
+real multi-touch events: walk, sprint, look, both fire buttons, aim, reload,
+walking and looking with two thumbs at once, pause and resume.
 
 ## Next steps worth doing
 

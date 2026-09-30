@@ -118,7 +118,8 @@ export class Weapon {
   reserve = 45;
   private cooldown = 0;
   private reloadT = -1;
-  private aim = 0;
+  /** 0 at the hip, 1 aimed down the sights. */
+  aim = 0;
   private kickZ = 0;
   private kickVel = 0;
   private kickRot = 0;
