@@ -14,6 +14,26 @@ const MAG_SIZE = 15;
 const FIRE_INTERVAL = 0.11;
 const RELOAD_TIME = 1.9;
 
+/**
+ * Critically damped follow (the usual "smooth damp"): eases out of rest and into the target with
+ * no jump in velocity, so pose changes start and finish softly. Exact for any frame time.
+ */
+class Ease {
+  x = 0;
+  v = 0;
+  constructor(x = 0) { this.x = x; }
+  /** `omega` sets the pace: about 4.7/omega seconds to get 95% of the way. */
+  step(dt: number, target: number, omega: number) {
+    const k = omega * dt;
+    const e = 1 / (1 + k + 0.48 * k * k + 0.235 * k * k * k);
+    const d = this.x - target;
+    const t = (this.v + omega * d) * dt;
+    this.v = (this.v - omega * t) * e;
+    this.x = target + (d + t) * e;
+    return this.x;
+  }
+}
+
 interface Casing {
   body: RAPIER.RigidBody;
   mesh: THREE.Mesh;
@@ -121,6 +141,9 @@ export class Weapon {
   private reloadT = -1;
   /** 0 at the hip, 1 aimed down the sights. */
   aim = 0;
+  private aimEase = new Ease();
+  /** 0 in a firing pose, 1 with the gun tucked for sprinting. */
+  private sprintEase = new Ease();
   private kickZ = 0;
   private kickVel = 0;
   private kickRot = 0;
@@ -324,11 +347,18 @@ export class Weapon {
 
     if (i.keyPressed('KeyR')) this.startReload();
     if (i.keyPressed('KeyF')) this.flashlight.visible = !this.flashlight.visible;
-    if (i.firePressed && this.cooldown <= 0 && !this.player.sprinting) this.fire();
+    // Sprinting tucks the gun down and across the chest; it swings there and back rather than
+    // snapping, and the sights only come up as it comes out of the tuck.
+    const sprint = this.sprintEase.step(dt, this.player.sprinting ? 1 : 0, this.player.sprinting ? 13 : 15);
+    const sprintSwing = Math.abs(this.sprintEase.v);
+    const ready = 1 - Math.min(1, sprint * 1.6);
+
+    const canFire = !this.player.sprinting && ready > 0.3;
+    if (i.firePressed && this.cooldown <= 0 && canFire) this.fire();
     else if (i.firePressed && this.ammo === 0 && !this.reloading) this.startReload();
 
     const wantAim = i.aim && !this.reloading && !this.player.sprinting;
-    this.aim += ((wantAim ? 1 : 0) - this.aim) * Math.min(1, 12 * dt);
+    this.aim = THREE.MathUtils.clamp(this.aimEase.step(dt, wantAim ? ready : 0, 19), 0, 1);
 
     // Reload timeline
     let reloadPose = 0;
@@ -378,9 +408,8 @@ export class Weapon {
     const ads = new THREE.Vector3(0, -0.0488, -0.5);
     const pos = hip.lerp(ads, this.aim);
     const bob = this.player.bob;
-    const sprint = this.player.sprinting ? 1 : 0;
     pos.x += bob.x * 0.6 * (1 - this.aim * 0.8);
-    pos.y += bob.y * 0.8 * (1 - this.aim * 0.8) - reloadPose * 0.06 - sprint * 0.04;
+    pos.y += bob.y * 0.8 * (1 - this.aim * 0.8) - reloadPose * 0.06 - sprint * 0.04 - sprintSwing * 0.006;
     pos.z += this.kickZ * 0.05 + this.wallBlock * 0.1;
     this.basePos.lerp(pos, Math.min(1, 25 * dt));
     this.view.position.copy(this.basePos);
