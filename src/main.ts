@@ -228,10 +228,10 @@ async function main() {
     // Post: motion blur follows camera angular velocity (screen-space approx).
     const u = renderer.bodycam.uniforms;
     const av = player.angularVel;
-    const blurScale = 0.012;
+    const blurScale = 0.004;
     u.uBlur.value.set(
-      THREE.MathUtils.clamp(av.x * blurScale, -0.04, 0.04),
-      THREE.MathUtils.clamp(-av.y * blurScale, -0.04, 0.04),
+      THREE.MathUtils.clamp(av.x * blurScale, -0.012, 0.012),
+      THREE.MathUtils.clamp(-av.y * blurScale, -0.012, 0.012),
     );
     u.uShutter.value.set(THREE.MathUtils.clamp(-av.x * 0.006, -0.03, 0.03), THREE.MathUtils.clamp(av.y * 0.004, -0.02, 0.02));
     u.uFlash.value = weapon.flashAmount;
