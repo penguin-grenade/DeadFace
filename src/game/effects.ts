@@ -141,6 +141,9 @@ export class Effects {
       metal: [0.3, 0.3, 0.3],
       flesh: [0.6, 0.55, 0.5],
       glass: [0.8, 0.85, 0.9],
+      fabric: [0.5, 0.46, 0.38],
+      fibreglass: [0.86, 0.85, 0.8],
+      rubber: [0.12, 0.12, 0.12],
     };
     const c = dustColor[surface];
     const count = surface === 'metal' ? 3 : 10;
@@ -167,7 +170,7 @@ export class Effects {
   private decal(point: THREE.Vector3, normal: THREE.Vector3, surface: SurfaceKind, parent?: THREE.Object3D) {
     const hard = surface === 'concrete' || surface === 'plaster' || surface === 'metal';
     const mesh = new THREE.Mesh(this.decalGeo, hard ? this.hardMat : this.softMat);
-    const s = hard ? 0.09 + Math.random() * 0.05 : 0.05;
+    const s = hard ? 0.09 + Math.random() * 0.05 : surface === 'fibreglass' ? 0.04 : 0.05;
     mesh.scale.set(s, s, s);
     mesh.receiveShadow = true;
     this.tmpQ.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { assetManifest } from '../engine/assets';
+import { assetManifest, assetUrl, reportAssetProblem } from '../engine/assets';
 
 /**
  * Procedural, tileable PBR texture sets (albedo + normal + roughness) generated
@@ -334,12 +334,11 @@ export function bulletHole(kind: 'hard' | 'soft') {
 
 /** Try /textures/<name>_*.jpg (from the Blender bake step) and fall back to the generator. */
 export async function loadOrGenerate(name: string, gen: () => TextureSet): Promise<TextureSet> {
-  const base = `${import.meta.env.BASE_URL}textures/${name}`;
   const loader = new THREE.TextureLoader();
   try {
     if (!(await assetManifest()).textures.includes(name)) return gen();
     const [map, normalMap, roughnessMap] = await Promise.all(
-      ['albedo', 'normal', 'roughness'].map((k) => loader.loadAsync(`${base}_${k}.jpg`)),
+      ['albedo', 'normal', 'roughness'].map((k) => loader.loadAsync(assetUrl(`textures/${name}_${k}.jpg`))),
     );
     map.colorSpace = THREE.SRGBColorSpace;
     for (const t of [map, normalMap, roughnessMap]) {
@@ -347,7 +346,8 @@ export async function loadOrGenerate(name: string, gen: () => TextureSet): Promi
       t.anisotropy = 8;
     }
     return { map, normalMap, roughnessMap };
-  } catch {
+  } catch (e) {
+    reportAssetProblem(`${name} textures`, e);
     return gen();
   }
 }

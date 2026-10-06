@@ -29,8 +29,22 @@
         <p class="unit">Unit BWC-7 · Range 4 · Low light</p>
         <p id="loading">Loading range…</p>
         <p class="cta" id="cta" hidden>Click to start</p>
-        <p class="touch-note">This prototype needs a keyboard and mouse.</p>
-        <table>
+        <p class="error" id="asset-note" hidden></p>
+        <p class="rotate-note">Turn your phone sideways for a wider view.</p>
+        <table class="touch-help">
+          <tr><td>Left thumb</td><td>Move, push past the ring to sprint</td></tr>
+          <tr><td>Right thumb</td><td>Drag to look, also from the fire button</td></tr>
+          <tr><td>Buttons</td><td>Fire, aim, reload, jump, crouch, light</td></tr>
+          <tr><td>Top left</td><td>Pause</td></tr>
+        </table>
+        <div class="opts" id="opts">
+          <div class="seg" role="group" aria-label="Post-FX quality">
+            <button type="button" data-q="low">Low</button><button type="button" data-q="medium">Med</button><button type="button" data-q="high">High</button>
+          </div>
+          <button type="button" data-opt="hud">Dot</button>
+          <button type="button" data-opt="reset">Reset props</button>
+        </div>
+        <table class="keys">
           <tr><td>WASD</td><td>Move</td></tr>
           <tr><td>Shift / C</td><td>Sprint / crouch</td></tr>
           <tr><td>Mouse</td><td>Look, left click to fire</td></tr>

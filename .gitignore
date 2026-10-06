@@ -2,3 +2,9 @@ node_modules
 dist
 dist-artifact
 *.blend1
+__pycache__/
+# tools/shots.mjs output; the smoke test's images are the ones kept for the README
+screenshots/*
+!screenshots/demo-*.png
+!screenshots/combat.png
+!screenshots/dist.png
