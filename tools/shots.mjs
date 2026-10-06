@@ -33,6 +33,10 @@ const VIEWS = {
   // Range mannequins: up close (the one at x 4.3, z -7) and down the range.
   dummy: { pos: [3.63, 0, -4.9], yaw: -0.31, pitch: -0.12 },
   dummy_far: { pos: [1.2, 0, 0.5], yaw: -0.28, pitch: -0.08 },
+  // Mid-turn (rad/s, + = left): the gun trails the turn and cants into it (sway.ts).
+  turn_left: { pos: [0.4, 0, 4.4], yaw: 0.25, pitch: -0.2, turn: 3 },
+  turn_right: { pos: [0.4, 0, 4.4], yaw: 0.25, pitch: -0.2, turn: -3 },
+  turn_left_ads: { pos: [0.4, 0, 4.4], yaw: 0.25, pitch: -0.2, aim: true, turn: 3 },
 };
 
 const names = process.argv.slice(2).filter((a) => !a.startsWith('-'));
@@ -100,7 +104,20 @@ for (const name of list) {
   }
   // Let springs, auto exposure and shadow caches settle.
   await page.waitForTimeout(Number(process.env.SETTLE || 5000));
+  if (v.turn) {
+    // Turn at a steady rate in game time, as the mouse would, and shoot mid-turn.
+    await page.evaluate((rate) => {
+      const p = window.__game.player;
+      p.__update ??= p.update;
+      p.update = function (dt, time) {
+        this.yawTarget += rate * dt;
+        return this.__update(dt, time);
+      };
+    }, v.turn);
+    await page.waitForTimeout(Number(process.env.TURN || 2500));
+  }
   await page.screenshot({ path: `${outDir}/${name}.png` });
+  if (v.turn) await page.evaluate(() => { const p = window.__game.player; p.update = p.__update; });
   const info = await page.evaluate(() => {
     const g = window.__game;
     const r = g.renderer.renderer.info;

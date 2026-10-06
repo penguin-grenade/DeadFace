@@ -6,6 +6,7 @@ import type { Audio } from '../engine/audio';
 import type { Input } from '../engine/input';
 import type { Player } from './player';
 import { ArmRig } from './arms';
+import { WeaponSway } from './sway';
 import type { Effects } from './effects';
 import { flashSprite } from './textures';
 
@@ -126,8 +127,10 @@ export class Weapon {
   private kickRotVel = 0;
   private slideT = 1;
   private wallBlock = 0;
-  private lagYaw = 0;
-  private lagPitch = 0;
+  private sway = new WeaponSway();
+  private localVel = new THREE.Vector3();
+  /** Smoothed pose position before sway is added on top. */
+  private basePos = new THREE.Vector3(0.075, -0.15, -0.37);
   private casings: Casing[] = [];
   private casingGeo = new THREE.CylinderGeometry(0.0048, 0.0048, 0.019, 10);
   private brass = new THREE.MeshStandardMaterial({ color: 0xb48a3c, metalness: 1, roughness: 0.3 });
@@ -357,10 +360,17 @@ export class Weapon {
     this.kickRotVel += (-this.kickRot * 380 - this.kickRotVel * 24) * dt;
     this.kickRot += this.kickRotVel * dt;
 
-    // Weapon lags behind camera rotation.
+    // Inertia: the gun trails turns and walking starts, swings past and settles (sway.ts).
     const av = this.player.angularVel;
-    this.lagYaw += (THREE.MathUtils.clamp(-av.x * 0.012, -0.08, 0.08) - this.lagYaw) * Math.min(1, 10 * dt);
-    this.lagPitch += (THREE.MathUtils.clamp(-av.y * 0.012, -0.08, 0.08) - this.lagPitch) * Math.min(1, 10 * dt);
+    const v = this.player.velocity;
+    const yaw = this.player.root.rotation.y;
+    this.localVel.set(
+      v.x * Math.cos(yaw) - v.z * Math.sin(yaw),
+      this.player.verticalSpeed,
+      v.x * Math.sin(yaw) + v.z * Math.cos(yaw),
+    );
+    const sway = this.sway;
+    sway.update(dt, time, av.x, av.y, this.localVel, this.aim, this.player.motionScale);
 
     // Hip: compressed low ready, right of centre. ADS: sight line on the camera axis (front post
     // top is 48.8 mm above the pistol origin), arms extended so both forearms rise from the frame edge.
@@ -369,16 +379,23 @@ export class Weapon {
     const pos = hip.lerp(ads, this.aim);
     const bob = this.player.bob;
     const sprint = this.player.sprinting ? 1 : 0;
-    pos.x += bob.x * 0.6 * (1 - this.aim * 0.8) + this.lagYaw * 0.3;
-    pos.y += bob.y * 0.8 * (1 - this.aim * 0.8) + this.lagPitch * 0.3 - reloadPose * 0.06 - sprint * 0.04;
+    pos.x += bob.x * 0.6 * (1 - this.aim * 0.8);
+    pos.y += bob.y * 0.8 * (1 - this.aim * 0.8) - reloadPose * 0.06 - sprint * 0.04;
     pos.z += this.kickZ * 0.05 + this.wallBlock * 0.1;
-    this.view.position.lerp(pos, Math.min(1, 25 * dt));
+    this.basePos.lerp(pos, Math.min(1, 25 * dt));
+    this.view.position.copy(this.basePos);
+    // The trail turns the gun about the arms rather than its own grip: it swings out to the side
+    // it lags on (and drops when looking up), as hands held out from the chest do.
+    const PIVOT = 0.28;
+    this.view.position.x += -Math.sin(sway.trailYaw) * PIVOT + sway.shift.x;
+    this.view.position.y += Math.sin(sway.trailPitch) * PIVOT + sway.shift.y;
+    this.view.position.z += sway.shift.z;
     // Hip pose is slightly canted so the side of the slide and both hands read on camera.
     const hipCant = 1 - this.aim;
     this.view.rotation.set(
-      this.kickRot * 0.04 + this.wallBlock * 0.9 + reloadPose * -0.5 - sprint * 0.35 + Math.sin(time * 1.6) * 0.004 + hipCant * 0.02,
-      this.lagYaw + sprint * 0.5 + reloadPose * 0.4 + hipCant * 0.14,
-      reloadPose * 0.6 + sprint * 0.2 - hipCant * 0.1,
+      this.kickRot * 0.04 + this.wallBlock * 0.9 + reloadPose * -0.5 - sprint * 0.35 + hipCant * 0.02 + sway.trailPitch,
+      sway.trailYaw + sprint * 0.5 + reloadPose * 0.4 + hipCant * 0.14,
+      reloadPose * 0.6 + sprint * 0.2 - hipCant * 0.1 + sway.cant,
       'YXZ',
     );
     this.rig?.update(this.player.camera);

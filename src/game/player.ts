@@ -48,7 +48,7 @@ export class Player {
   private stepSign = 1;
   sensitivity = 0.0022;
   /** Head bob / sway multiplier; toned down for people who ask for reduced motion. */
-  private motionScale = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.3 : 1;
+  readonly motionScale = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.3 : 1;
 
   // Camera feel springs
   private landDip = new Spring(120, 14);
@@ -94,6 +94,11 @@ export class Player {
     this.recoilPitch.vel += pitch * 60;
     this.recoilYaw.vel += yaw * 50;
     this.recoilRoll.vel += (Math.random() - 0.5) * 0.9;
+  }
+
+  /** Vertical speed (m/s, + = up): jumps and landings. */
+  get verticalSpeed() {
+    return this.vy;
   }
 
   get position() {
