@@ -22,29 +22,29 @@ interface Tune {
 }
 
 const HIP = {
-  turn: { k: 150, zeta: 0.6, inertia: 0.22, drag: 3.8 },
-  pitch: { k: 170, zeta: 0.65, inertia: 0.16, drag: 2.4 },
-  move: { k: 120, zeta: 0.55, inertia: 0.08, drag: 0.28 },
-  roll: { k: 90, zeta: 0.5 },
+  turn: { k: 120, zeta: 0.55, inertia: 0.4, drag: 7.0 },
+  pitch: { k: 140, zeta: 0.6, inertia: 0.3, drag: 4.5 },
+  move: { k: 100, zeta: 0.5, inertia: 0.14, drag: 0.5 },
+  roll: { k: 80, zeta: 0.45 },
   /** Cant per rad/s of turn, and per m/s of strafe. */
-  rollTurn: 0.028,
-  rollStrafe: 0.02,
+  rollTurn: 0.05,
+  rollStrafe: 0.035,
   /** Breathing / muscle drift amplitude (rad). */
-  idle: 0.006,
+  idle: 0.008,
 };
 const ADS = {
-  turn: { k: 260, zeta: 0.7, inertia: 0.1, drag: 1.6 },
-  pitch: { k: 280, zeta: 0.72, inertia: 0.08, drag: 1.3 },
-  move: { k: 200, zeta: 0.65, inertia: 0.035, drag: 0.12 },
+  turn: { k: 220, zeta: 0.65, inertia: 0.17, drag: 2.7 },
+  pitch: { k: 240, zeta: 0.68, inertia: 0.14, drag: 2.2 },
+  move: { k: 180, zeta: 0.6, inertia: 0.06, drag: 0.2 },
   roll: { k: 140, zeta: 0.6 },
-  rollTurn: 0.009,
-  rollStrafe: 0.006,
-  idle: 0.0022,
+  rollTurn: 0.016,
+  rollStrafe: 0.01,
+  idle: 0.003,
 };
 
-const MAX_TRAIL = 0.14; // rad, soft limit for a flick
-const MAX_ROLL = 0.16;
-const MAX_SHIFT = 0.035; // m
+const MAX_TRAIL = 0.22; // rad, soft limit for a flick
+const MAX_ROLL = 0.24;
+const MAX_SHIFT = 0.05; // m
 const STEP = 1 / 120;
 
 class Osc {

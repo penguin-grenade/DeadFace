@@ -386,7 +386,7 @@ export class Weapon {
     this.view.position.copy(this.basePos);
     // The trail turns the gun about the arms rather than its own grip: it swings out to the side
     // it lags on (and drops when looking up), as hands held out from the chest do.
-    const PIVOT = 0.28;
+    const PIVOT = 0.34;
     this.view.position.x += -Math.sin(sway.trailYaw) * PIVOT + sway.shift.x;
     this.view.position.y += Math.sin(sway.trailPitch) * PIVOT + sway.shift.y;
     this.view.position.z += sway.shift.z;
